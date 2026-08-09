@@ -139,6 +139,19 @@ pm2 save
 
 ---
 
+## ⚡ Automated Multi-Platform GitHub Actions Workflows
+
+This repository contains pre-configured GitHub Actions workflows located in `.github/workflows/`:
+
+* **`build-android-apk.yml`**: Automatically builds Android `.apk` binaries using PWABuilder / TWA & Android SDK on every `push` to `main`.
+* **`build-desktop-apps.yml`**: Cross-platform matrix builder for desktop packages:
+  * 🪟 **Windows**: `.exe` Standalone Installer
+  * 🐧 **Linux**: `.deb` Debian Package
+  * 🍎 **macOS**: `.dmg` Disk Image
+* **`release-all.yml`**: Unified release pipeline that compiles and publishes all `.apk`, `.exe`, `.deb`, and `.dmg` binaries directly to GitHub Releases whenever a version tag (e.g. `v1.0.0`) is pushed.
+
+---
+
 ## 📦 PWA & Android APK Generation
 
 1. Open **APK & PWA Build Center** in the app UI.

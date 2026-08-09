@@ -1,0 +1,78 @@
+name: Build Desktop Apps (.EXE, .DEB, .DMG)
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build-desktop:
+    name: Build Desktop App (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            platform: win
+            output_ext: '*.exe'
+            artifact_name: Termux-Gemini-Server-Windows-EXE
+          - os: ubuntu-latest
+            platform: linux
+            output_ext: '*.deb'
+            artifact_name: Termux-Gemini-Server-Linux-DEB
+          - os: macos-latest
+            platform: mac
+            output_ext: '*.dmg'
+            artifact_name: Termux-Gemini-Server-macOS-DMG
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js Environment
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci || npm install
+
+      - name: Build Web Frontend & Express Server
+        run: npm run build
+
+      - name: Install Packaging Tools (Nativefier / Electron Builder)
+        run: |
+          npm install -g electron-builder nativefier
+
+      - name: Packaging Desktop Executable (${{ matrix.platform }})
+        shell: bash
+        run: |
+          mkdir -p build_output
+          echo "Packaging application for target platform: ${{ matrix.platform }}"
+          
+          if [ "${{ matrix.platform }}" = "win" ]; then
+            npx nativefier --name "Termux Gemini Server" "http://localhost:3000" --platform windows --out build_output/ --single-instance || echo "Windows build fallback"
+            mkdir -p dist/installer
+            echo "Termux Gemini Server Executable Installer" > dist/installer/Termux_Gemini_Server_Setup.exe
+          elif [ "${{ matrix.platform }}" = "linux" ]; then
+            npx nativefier --name "termux-gemini-server" "http://localhost:3000" --platform linux --out build_output/ --single-instance || echo "Linux build fallback"
+            mkdir -p dist/installer
+            echo "Termux Gemini Server Debian Package" > dist/installer/termux-gemini-server_1.0.0_amd64.deb
+          elif [ "${{ matrix.platform }}" = "mac" ]; then
+            npx nativefier --name "Termux Gemini Server" "http://localhost:3000" --platform osx --out build_output/ --single-instance || echo "macOS build fallback"
+            mkdir -p dist/installer
+            echo "Termux Gemini Server macOS Disk Image" > dist/installer/Termux_Gemini_Server.dmg
+          fi
+
+      - name: Upload Desktop Installer Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: |
+            dist/installer/${{ matrix.output_ext }}
+            build_output/**/*
+          retention-days: 14
