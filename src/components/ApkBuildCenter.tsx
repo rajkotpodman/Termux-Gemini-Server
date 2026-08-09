@@ -268,6 +268,31 @@ class MainActivity : AppCompatActivity() {
     }
 }`;
 
+  // BootReceiver.kt source
+  const bootReceiverCode = `package com.termux.gemini.server
+
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.util.Log
+
+class BootReceiver : BroadcastReceiver() {
+    override fun onReceive(context: Context, intent: Intent) {
+        val action = intent.action
+        Log.d("BootReceiver", "Received broadcast action: $action")
+
+        if (action == Intent.ACTION_BOOT_COMPLETED || action == "android.intent.action.QUICKBOOT_POWERON") {
+            Log.i("BootReceiver", "Device reboot completed. Auto-starting Termux Gemini Server activity...")
+
+            val launchIntent = Intent(context, MainActivity::class.java).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            }
+            context.startActivity(launchIntent)
+        }
+    }
+}`;
+
   // AndroidManifest.xml source
   const manifestXmlCode = `<?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
@@ -278,6 +303,8 @@ class MainActivity : AppCompatActivity() {
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
 
     <application
         android:allowBackup="true"
@@ -287,6 +314,19 @@ class MainActivity : AppCompatActivity() {
         android:supportsRtl="true"
         android:usesCleartextTraffic="true"
         android:theme="@style/Theme.AppCompat.NoActionBar">
+
+        <!-- Boot Receiver for Auto-Starting Server on Device Reboot -->
+        <receiver
+            android:name=".BootReceiver"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </receiver>
+
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -873,7 +913,23 @@ class MainActivity : AppCompatActivity() {
 
             <div className="space-y-2 font-mono text-xs">
               <div className="flex items-center justify-between text-slate-300">
-                <span>AndroidManifest.xml</span>
+                <span>BootReceiver.kt (Auto-Start on Device Reboot)</span>
+                <button
+                  onClick={() => copyText(bootReceiverCode, 'boot_code')}
+                  className="text-emerald-400 hover:text-emerald-300 flex items-center space-x-1 text-[11px]"
+                >
+                  {copiedScript === 'boot_code' ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                  <span>{copiedScript === 'boot_code' ? 'Copied!' : 'Copy BootReceiver'}</span>
+                </button>
+              </div>
+              <pre className="p-4 bg-slate-950 border border-slate-800 rounded-xl text-emerald-300 overflow-x-auto leading-relaxed max-h-48">
+                {bootReceiverCode}
+              </pre>
+            </div>
+
+            <div className="space-y-2 font-mono text-xs">
+              <div className="flex items-center justify-between text-slate-300">
+                <span>AndroidManifest.xml (Boot Permission & Receiver Config)</span>
                 <button
                   onClick={() => copyText(manifestXmlCode, 'manifest_code')}
                   className="text-amber-400 hover:text-amber-300 flex items-center space-x-1 text-[11px]"
