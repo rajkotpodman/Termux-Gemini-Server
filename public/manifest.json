@@ -1,0 +1,21 @@
+{
+  "id": "/",
+  "short_name": "Termux Gemini",
+  "name": "Termux Gemini Server",
+  "description": "24/7 Background Server & Media Streaming Host with Google Drive & Gemini AI",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "type": "image/svg+xml",
+      "sizes": "192x192 512x512",
+      "purpose": "any maskable"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#020617",
+  "theme_color": "#0891b2",
+  "display": "standalone",
+  "orientation": "any",
+  "scope": "/",
+  "categories": ["utilities", "media", "entertainment"]
+}

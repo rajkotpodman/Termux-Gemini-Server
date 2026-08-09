@@ -1,0 +1,6 @@
+{
+  "name": "Termux Gemini Server",
+  "description": "24/7 Background Server & Media Streaming Host with Google Drive & Gemini AI",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

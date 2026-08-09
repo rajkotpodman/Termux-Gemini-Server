@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#020617"/>
+      <stop offset="50%" stop-color="#0f172a"/>
+      <stop offset="100%" stop-color="#0891b2"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38bdf8"/>
+      <stop offset="100%" stop-color="#10b981"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="128" fill="url(#bg)"/>
+  <rect x="32" y="32" width="448" height="448" rx="100" fill="none" stroke="url(#accent)" stroke-width="8" opacity="0.4"/>
+  
+  <!-- Terminal Prompt symbol -->
+  <path d="M120 180 L200 256 L120 332" fill="none" stroke="url(#accent)" stroke-width="32" stroke-linecap="round" stroke-linejoin="round"/>
+  <line x1="230" y1="332" x2="320" y2="332" stroke="url(#accent)" stroke-width="32" stroke-linecap="round"/>
+  
+  <!-- Server / Cloud Sparkle Icon -->
+  <path d="M370 170 C370 140 340 120 310 135 C295 110 255 110 240 135 C215 130 190 155 200 180 C175 195 180 230 205 240 L370 240 C390 225 390 185 370 170 Z" fill="#0891b2" opacity="0.6"/>
+  <circle cx="360" cy="180" r="16" fill="#38bdf8"/>
+  <circle cx="280" cy="160" r="24" fill="#10b981"/>
+</svg>

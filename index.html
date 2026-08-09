@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0891b2" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Termux Gemini" />
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+    <title>Termux Gemini Server</title>
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', function() {
+          navigator.serviceWorker.register('/sw.js').then(function(reg) {
+            console.log('SW Registered successfully', reg.scope);
+          }).catch(function(err) {
+            console.warn('SW Registration failed', err);
+          });
+        });
+      }
+    </script>
+    <script>
+      (function() {
+        try {
+          var realFetch = window.fetch;
+          var fetchContainer = realFetch;
+          // Redefine window.fetch property on window itself and Window.prototype
+          var descriptor = {
+            get: function() { return fetchContainer; },
+            set: function(v) { fetchContainer = v; },
+            configurable: true,
+            enumerable: true
+          };
+          try { Object.defineProperty(window, 'fetch', descriptor); } catch (e) {}
+          try { Object.defineProperty(Window.prototype, 'fetch', descriptor); } catch (e) {}
+
+          // Proxy Object.defineProperty to intercept direct property definitions on window or Window.prototype for 'fetch'
+          var origDefineProperty = Object.defineProperty;
+          Object.defineProperty = function(obj, prop, desc) {
+            if ((obj === window || obj === Window.prototype) && prop === 'fetch') {
+              if (desc && typeof desc.get === 'function') {
+                fetchContainer = desc.get();
+              } else if (desc && 'value' in desc) {
+                fetchContainer = desc.value;
+              }
+              return obj;
+            }
+            return origDefineProperty.apply(this, arguments);
+          };
+        } catch (err) {
+          console.warn('Fetch proxy error:', err);
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+
