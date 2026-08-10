@@ -28,6 +28,7 @@ import { ApiPlayground } from './components/ApiPlayground';
 import { ClientSnippets } from './components/ClientSnippets';
 import { GoogleDriveManager } from './components/GoogleDriveManager';
 import { LocalFolderDeployer } from './components/LocalFolderDeployer';
+import { SyncthingRcloneManager } from './components/SyncthingRcloneManager';
 import { ServerPowerControl } from './components/ServerPowerControl';
 import { LanguageSelector } from './components/LanguageSelector';
 import { HelpDialog } from './components/HelpDialog';
@@ -38,7 +39,7 @@ import { signInWithFirebaseGoogle, logoutFirebase, onAuthStateChanged, auth } fr
 
 function MainAppContent() {
   const { t } = useTranslation();
-  const [activeTab, setActiveTab] = useState<'folder' | 'code' | 'guide' | 'tester' | 'clients' | 'drive' | 'apk'>('folder');
+  const [activeTab, setActiveTab] = useState<'sync' | 'folder' | 'code' | 'guide' | 'tester' | 'clients' | 'drive' | 'apk'>('sync');
   const [health, setHealth] = useState<HealthStatus | null>(null);
   const [healthLoading, setHealthLoading] = useState(false);
   const [user, setUser] = useState<GoogleUser | null>(null);
@@ -277,6 +278,22 @@ function MainAppContent() {
         {/* Navigation Tabs */}
         <div className="border-b border-slate-800 flex overflow-x-auto space-x-1 scrollbar-none">
           <button
+            id="tab-nav-sync"
+            onClick={() => setActiveTab('sync')}
+            className={`flex items-center space-x-2 px-5 py-3 border-b-2 font-medium text-sm transition-all whitespace-nowrap ${
+              activeTab === 'sync'
+                ? 'border-indigo-500 text-indigo-400 bg-indigo-500/5 font-semibold'
+                : 'border-transparent text-slate-400 hover:text-slate-200 hover:border-slate-700'
+            }`}
+          >
+            <RefreshCw className={`w-4 h-4 text-indigo-400 ${activeTab === 'sync' ? 'animate-spin-slow' : ''}`} />
+            <span>🔄 24/7 Folder Sync Manager</span>
+            <span className="text-[10px] bg-indigo-950 text-indigo-300 px-1.5 py-0.5 rounded border border-indigo-800">
+              SYNCTHING
+            </span>
+          </button>
+
+          <button
             id="tab-nav-folder"
             onClick={() => setActiveTab('folder')}
             className={`flex items-center space-x-2 px-5 py-3 border-b-2 font-medium text-sm transition-all whitespace-nowrap ${
@@ -287,9 +304,6 @@ function MainAppContent() {
           >
             <FolderPlus className="w-4 h-4 text-cyan-400" />
             <span>📁 {t('tabDeployer')}</span>
-            <span className="text-[10px] bg-cyan-950 text-cyan-300 px-1.5 py-0.5 rounded border border-cyan-800">
-              NEW
-            </span>
           </button>
 
           <button
@@ -376,6 +390,7 @@ function MainAppContent() {
 
         {/* Tab Content Panels */}
         <div className="pb-6">
+          {activeTab === 'sync' && <SyncthingRcloneManager />}
           {activeTab === 'folder' && <LocalFolderDeployer onOpenHelp={() => setIsHelpOpen(true)} />}
           {activeTab === 'code' && <CodeViewer />}
           {activeTab === 'guide' && <TermuxGuide />}
