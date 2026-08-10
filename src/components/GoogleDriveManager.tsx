@@ -61,16 +61,88 @@ export const GoogleDriveManager: React.FC<GoogleDriveManagerProps> = ({ user, on
   const [deleting, setDeleting] = useState(false);
   const [deleteSuccess, setDeleteSuccess] = useState<string | null>(null);
 
+  const [creatingFolder, setCreatingFolder] = useState(false);
+
+  const handleCreateFolderInDrive = async (folderName = 'Termux_Gemini_Live') => {
+    setCreatingFolder(true);
+    setError(null);
+    setDeploySuccess(null);
+    try {
+      const accessToken = localStorage.getItem('google_drive_access_token');
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
+
+      let res = await fetch('/api/drive/folders', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ name: folderName }),
+      }).catch(() => null);
+
+      if (!res || !res.ok) {
+        if (accessToken) {
+          res = await fetch('https://www.googleapis.com/drive/v3/files', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${accessToken}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              name: folderName,
+              mimeType: 'application/vnd.google-apps.folder',
+            }),
+          });
+        }
+      }
+
+      if (res && res.ok) {
+        setDeploySuccess(`📁 Created Google Drive folder "${folderName}" successfully!`);
+        setTimeout(() => setDeploySuccess(null), 5000);
+        await fetchDriveFolders();
+      } else {
+        const errData = res ? await res.json().catch(() => ({})) : {};
+        setError(errData.error?.message || errData.message || 'Failed to create folder in Google Drive.');
+      }
+    } catch (err: any) {
+      setError(err.message || 'Error creating Google Drive folder.');
+    } finally {
+      setCreatingFolder(false);
+    }
+  };
+
   const fetchDriveFolders = async () => {
     if (!user) return;
     setLoadingFolders(true);
     try {
-      const res = await fetch('/api/drive/folders');
-      const contentType = res.headers.get('content-type') || '';
-      if (res.ok && contentType.includes('application/json')) {
-        const data = await res.json();
-        setFolders(data.folders || []);
+      const accessToken = localStorage.getItem('google_drive_access_token');
+      const headers: Record<string, string> = {};
+      if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
+
+      const res = await fetch('/api/drive/folders', { headers }).catch(() => null);
+      if (res && res.ok) {
+        const contentType = res.headers.get('content-type') || '';
+        if (contentType.includes('application/json')) {
+          const data = await res.json();
+          if (data.folders && Array.isArray(data.folders)) {
+            setFolders(data.folders);
+            return;
+          }
+        }
       }
+
+      // Direct fallback to Google Drive REST API
+      if (accessToken) {
+        const q = encodeURIComponent("mimeType = 'application/vnd.google-apps.folder' and trashed = false");
+        const directRes = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,mimeType,size,createdTime,modifiedTime)&pageSize=50&orderBy=name`, {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
+        if (directRes.ok) {
+          const directData = await directRes.json();
+          setFolders(directData.files || []);
+          return;
+        }
+      }
+
+      setFolders([]);
     } catch (err) {
       console.error('Error fetching Drive folders:', err);
     } finally {
@@ -83,24 +155,55 @@ export const GoogleDriveManager: React.FC<GoogleDriveManagerProps> = ({ user, on
     setLoading(true);
     setError(null);
     try {
+      const accessToken = localStorage.getItem('google_drive_access_token');
+      const headers: Record<string, string> = {};
+      if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
+
       let url = '/api/drive/files';
       if (queryStr.trim()) {
         url += `?q=${encodeURIComponent(queryStr.trim())}`;
       }
-      const res = await fetch(url);
-      const contentType = res.headers.get('content-type') || '';
-      if (res.ok && contentType.includes('application/json')) {
-        const data = await res.json();
-        setFiles(data.files || []);
-      } else if (contentType.includes('application/json')) {
-        const data = await res.json();
-        if (res.status === 401) {
-          setError('Google authentication required. Please click "Sign in with Google" to authenticate.');
+
+      const res = await fetch(url, { headers }).catch(() => null);
+      if (res && res.ok) {
+        const contentType = res.headers.get('content-type') || '';
+        if (contentType.includes('application/json')) {
+          const data = await res.json();
+          if (data.files && Array.isArray(data.files)) {
+            setFiles(data.files);
+            return;
+          }
+        }
+      }
+
+      // Direct fallback to Google Drive REST API
+      if (accessToken) {
+        let driveUrl = 'https://www.googleapis.com/drive/v3/files?fields=files(id,name,mimeType,size,createdTime,modifiedTime,webViewLink,iconLink,thumbnailLink)&pageSize=50&orderBy=modifiedTime%20desc';
+        if (queryStr.trim()) {
+          const searchQuery = `name contains '${queryStr.trim().replace(/'/g, "\\'")}' and trashed = false`;
+          driveUrl += `&q=${encodeURIComponent(searchQuery)}`;
         } else {
-          setError(data.error || data.message || 'Failed to fetch Google Drive files.');
+          driveUrl += `&q=${encodeURIComponent('trashed = false')}`;
+        }
+
+        const directRes = await fetch(driveUrl, {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
+
+        if (directRes.ok) {
+          const directData = await directRes.json();
+          setFiles(directData.files || []);
+          return;
+        } else {
+          const errData = await directRes.json().catch(() => ({}));
+          if (directRes.status === 401) {
+            setError('Google session expired or required. Click "Direct Google Sign-In" to re-authenticate.');
+          } else {
+            setError(errData.error?.message || 'Failed to list Google Drive files.');
+          }
         }
       } else {
-        setError(`Server returned non-JSON response (${res.status}). Ensure you are signed in.`);
+        setError('Google authentication required. Click "Direct Google Sign-In" to authenticate.');
       }
     } catch (err: any) {
       setError(err.message || 'Network error fetching Google Drive files.');
@@ -321,6 +424,14 @@ export const GoogleDriveManager: React.FC<GoogleDriveManagerProps> = ({ user, on
 
         <div className="flex items-center space-x-2">
           <button
+            onClick={() => handleCreateFolderInDrive('Termux_Gemini_Live')}
+            disabled={creatingFolder}
+            className="flex items-center space-x-1.5 px-3.5 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-xl text-xs font-semibold transition-all shadow-md"
+          >
+            {creatingFolder ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Folder className="w-4 h-4" />}
+            <span>New Live Folder</span>
+          </button>
+          <button
             onClick={() => setIsCreateOpen(true)}
             className="flex items-center space-x-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-medium transition-all shadow-md"
           >
@@ -395,7 +506,26 @@ export const GoogleDriveManager: React.FC<GoogleDriveManagerProps> = ({ user, on
         {loadingFolders ? (
           <div className="text-center py-6 text-slate-400 text-xs font-mono">Loading Google Drive folders...</div>
         ) : folders.length === 0 ? (
-          <div className="text-center py-6 text-slate-500 text-xs">No Google Drive folders found in your account.</div>
+          <div className="text-center py-6 space-y-3">
+            <div className="text-slate-400 text-xs">No Google Drive folders found in your account.</div>
+            <button
+              onClick={() => handleCreateFolderInDrive('Termux_Gemini_Live')}
+              disabled={creatingFolder}
+              className="inline-flex items-center space-x-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-800 text-white font-bold text-xs rounded-xl transition-all shadow-md"
+            >
+              {creatingFolder ? (
+                <>
+                  <RefreshCw className="w-4 h-4 animate-spin text-white" />
+                  <span>Creating Folder on Drive...</span>
+                </>
+              ) : (
+                <>
+                  <Plus className="w-4 h-4 text-white" />
+                  <span>➕ Create Live Hosting Folder in Google Drive</span>
+                </>
+              )}
+            </button>
+          </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {folders.map((folder) => {

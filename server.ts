@@ -135,6 +135,20 @@ async function startServer() {
   let currentUser: { email?: string; name?: string; picture?: string; id?: string } | null = null;
   let currentAccessToken: string | null = null;
 
+  // Helper to resolve access token from session or incoming Authorization header
+  function getEffectiveAccessToken(req: express.Request): string | null {
+    const authHeader = req.headers.authorization || req.headers.Authorization;
+    if (typeof authHeader === 'string' && authHeader.startsWith('Bearer ')) {
+      const tokenFromHeader = authHeader.substring(7).trim();
+      if (tokenFromHeader) return tokenFromHeader;
+    }
+    const customHeader = req.headers['x-google-access-token'];
+    if (typeof customHeader === 'string' && customHeader.trim()) {
+      return customHeader.trim();
+    }
+    return currentAccessToken;
+  }
+
   // Endpoint 1: Get Google Auth URL
   app.get('/api/auth/google/url', (req, res) => {
     const clientId = getGoogleClientId();
@@ -332,12 +346,13 @@ async function startServer() {
 
   // Google Drive API endpoints
   app.get('/api/drive/files', async (req, res) => {
-    if (!currentAccessToken) {
+    const token = getEffectiveAccessToken(req);
+    if (!token) {
       return res.status(401).json({ error: 'Unauthorized', message: 'Please sign in with Google first.', code: 'UNAUTHORIZED' });
     }
     try {
       const { q } = req.query;
-      let driveUrl = 'https://www.googleapis.com/drive/v3/files?fields=files(id,name,mimeType,size,createdTime,modifiedTime,webViewLink,iconLink,thumbnailLink)&pageSize=30&orderBy=modifiedTime%20desc';
+      let driveUrl = 'https://www.googleapis.com/drive/v3/files?fields=files(id,name,mimeType,size,createdTime,modifiedTime,webViewLink,iconLink,thumbnailLink)&pageSize=50&orderBy=modifiedTime%20desc';
       if (q && typeof q === 'string') {
         const searchQuery = `name contains '${q.replace(/'/g, "\\'")}' and trashed = false`;
         driveUrl += `&q=${encodeURIComponent(searchQuery)}`;
@@ -346,7 +361,7 @@ async function startServer() {
       }
 
       const driveRes = await fetch(driveUrl, {
-        headers: { Authorization: `Bearer ${currentAccessToken}` },
+        headers: { Authorization: `Bearer ${token}` },
       });
       const data = await driveRes.json();
       if (!driveRes.ok) {
@@ -363,7 +378,8 @@ async function startServer() {
   });
 
   app.post('/api/drive/files', async (req, res) => {
-    if (!currentAccessToken) {
+    const token = getEffectiveAccessToken(req);
+    if (!token) {
       return res.status(401).json({ error: 'Unauthorized', message: 'Please sign in with Google first.', code: 'UNAUTHORIZED' });
     }
     try {
@@ -389,7 +405,7 @@ async function startServer() {
       const driveRes = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,mimeType,webViewLink', {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${currentAccessToken}`,
+          Authorization: `Bearer ${token}`,
           'Content-Type': `multipart/related; boundary=${boundary}`,
         },
         body: multipartRequestBody,
@@ -410,14 +426,15 @@ async function startServer() {
   });
 
   app.delete('/api/drive/files/:fileId', async (req, res) => {
-    if (!currentAccessToken) {
+    const token = getEffectiveAccessToken(req);
+    if (!token) {
       return res.status(401).json({ error: 'Unauthorized', message: 'Please sign in with Google first.', code: 'UNAUTHORIZED' });
     }
     try {
       const { fileId } = req.params;
       const driveRes = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}`, {
         method: 'DELETE',
-        headers: { Authorization: `Bearer ${currentAccessToken}` },
+        headers: { Authorization: `Bearer ${token}` },
       });
 
       if (!driveRes.ok) {
@@ -436,14 +453,15 @@ async function startServer() {
 
   // Google Drive: List Folders
   app.get('/api/drive/folders', async (req, res) => {
-    if (!currentAccessToken) {
+    const token = getEffectiveAccessToken(req);
+    if (!token) {
       return res.status(401).json({ error: 'Unauthorized', message: 'Please sign in with Google first.', code: 'UNAUTHORIZED' });
     }
     try {
       const q = encodeURIComponent("mimeType = 'application/vnd.google-apps.folder' and trashed = false");
       const driveUrl = `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,mimeType,size,createdTime,modifiedTime)&pageSize=50&orderBy=name`;
       const driveRes = await fetch(driveUrl, {
-        headers: { Authorization: `Bearer ${currentAccessToken}` },
+        headers: { Authorization: `Bearer ${token}` },
       });
       const data = await driveRes.json();
       if (!driveRes.ok) {
@@ -459,9 +477,39 @@ async function startServer() {
     }
   });
 
+  // Google Drive: Create New Folder
+  app.post('/api/drive/folders', express.json(), async (req, res) => {
+    const token = getEffectiveAccessToken(req);
+    if (!token) {
+      return res.status(401).json({ error: 'Unauthorized', message: 'Please sign in with Google first.', code: 'UNAUTHORIZED' });
+    }
+    try {
+      const { name = 'Termux_Gemini_Live' } = req.body || {};
+      const driveRes = await fetch('https://www.googleapis.com/drive/v3/files', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: name.trim(),
+          mimeType: 'application/vnd.google-apps.folder',
+        }),
+      });
+      const data = await driveRes.json();
+      if (!driveRes.ok) {
+        return res.status(driveRes.status).json(data);
+      }
+      return res.json({ status: 'success', folder: data });
+    } catch (err: any) {
+      return res.status(500).json({ error: 'Drive Create Folder Error', message: err.message });
+    }
+  });
+
   // Google Drive: List Files in Folder
   app.get('/api/drive/folders/:folderId/files', async (req, res) => {
-    if (!currentAccessToken) {
+    const token = getEffectiveAccessToken(req);
+    if (!token) {
       return res.status(401).json({ error: 'Unauthorized', message: 'Please sign in with Google first.', code: 'UNAUTHORIZED' });
     }
     try {
@@ -469,7 +517,7 @@ async function startServer() {
       const q = encodeURIComponent(`'${folderId.replace(/'/g, "\\'")}' in parents and trashed = false`);
       const driveUrl = `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,mimeType,size,createdTime,modifiedTime,webViewLink,thumbnailLink)&pageSize=100&orderBy=name`;
       const driveRes = await fetch(driveUrl, {
-        headers: { Authorization: `Bearer ${currentAccessToken}` },
+        headers: { Authorization: `Bearer ${token}` },
       });
       const data = await driveRes.json();
       if (!driveRes.ok) {
@@ -487,7 +535,8 @@ async function startServer() {
 
   // Google Drive: Import Single File to Live Server Media Storage
   app.post('/api/drive/import-file', async (req, res) => {
-    if (!currentAccessToken) {
+    const token = getEffectiveAccessToken(req);
+    if (!token) {
       return res.status(401).json({ error: 'Unauthorized', message: 'Please sign in with Google first.', code: 'UNAUTHORIZED' });
     }
     try {
@@ -502,7 +551,7 @@ async function startServer() {
 
       console.log(`[Drive Importer] Importing file ID ${fileId} -> ${fileName}`);
       const driveRes = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, {
-        headers: { Authorization: `Bearer ${currentAccessToken}` },
+        headers: { Authorization: `Bearer ${token}` },
       });
 
       if (!driveRes.ok) {
@@ -534,7 +583,8 @@ async function startServer() {
 
   // Google Drive: Import Entire Folder to Live Server Media Storage
   app.post('/api/drive/import-folder', async (req, res) => {
-    if (!currentAccessToken) {
+    const token = getEffectiveAccessToken(req);
+    if (!token) {
       return res.status(401).json({ error: 'Unauthorized', message: 'Please sign in with Google first.', code: 'UNAUTHORIZED' });
     }
     try {
@@ -547,7 +597,7 @@ async function startServer() {
       const q = encodeURIComponent(`'${folderId.replace(/'/g, "\\'")}' in parents and trashed = false and mimeType != 'application/vnd.google-apps.folder'`);
       const listUrl = `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,mimeType,size)&pageSize=100`;
       const listRes = await fetch(listUrl, {
-        headers: { Authorization: `Bearer ${currentAccessToken}` },
+        headers: { Authorization: `Bearer ${token}` },
       });
 
       const listData = await listRes.json();
@@ -574,7 +624,7 @@ async function startServer() {
         try {
           console.log(`[Drive Folder Import] Importing (${i + 1}/${files.length}): ${file.name} -> ${cleanName}`);
           const downloadRes = await fetch(`https://www.googleapis.com/drive/v3/files/${file.id}?alt=media`, {
-            headers: { Authorization: `Bearer ${currentAccessToken}` },
+            headers: { Authorization: `Bearer ${token}` },
           });
 
           if (!downloadRes.ok) {
@@ -671,6 +721,9 @@ async function startServer() {
     if (
       req.path === '/server/status' ||
       req.path === '/server/toggle' ||
+      req.path === '/server/shutdown' ||
+      req.path === '/server/stop' ||
+      req.path === '/server/start' ||
       req.path === '/server/urls' ||
       req.path === '/health' ||
       req.path === '/sync/status' ||
@@ -731,11 +784,11 @@ async function startServer() {
   });
 
   // Endpoint: Toggle Server Online/Shutdown State
-  app.post('/api/server/toggle', (req, res) => {
+  app.post('/api/server/toggle', express.json(), (req, res) => {
     const { action } = req.body || {};
-    if (action === 'start') {
+    if (action === 'start' || action === 'on') {
       isServerOnline = true;
-    } else if (action === 'shutdown') {
+    } else if (action === 'shutdown' || action === 'stop' || action === 'off') {
       isServerOnline = false;
     } else {
       isServerOnline = !isServerOnline;
@@ -750,6 +803,28 @@ async function startServer() {
       message: isServerOnline
         ? 'Server is now ONLINE & running continuously in background!'
         : 'Server is SHUTDOWN. All media streams and AI endpoints are paused.',
+    });
+  });
+
+  app.all(['/api/server/shutdown', '/api/server/stop'], (req, res) => {
+    isServerOnline = false;
+    saveServerState();
+    console.log('[Express Server] Server SHUTDOWN endpoint triggered.');
+    return res.json({
+      status: 'success',
+      isServerOnline: false,
+      message: 'Server has been successfully shut down / stopped.',
+    });
+  });
+
+  app.all('/api/server/start', (req, res) => {
+    isServerOnline = true;
+    saveServerState();
+    console.log('[Express Server] Server STARTED endpoint triggered.');
+    return res.json({
+      status: 'success',
+      isServerOnline: true,
+      message: 'Server is now online & running continuously in background.',
     });
   });
 

@@ -15,6 +15,11 @@ export const ServerPowerControl: React.FC<ServerPowerControlProps> = ({ onStatus
   const [toggling, setToggling] = useState(false);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
+  const [isOnline, setIsOnline] = useState<boolean>(() => {
+    const saved = localStorage.getItem('server_online_state');
+    return saved !== null ? saved === 'true' : true;
+  });
+
   const fetchServerStatus = async () => {
     setLoading(true);
     try {
@@ -23,6 +28,8 @@ export const ServerPowerControl: React.FC<ServerPowerControlProps> = ({ onStatus
       if (res.ok && contentType.includes('application/json')) {
         const data: ServerStatus = await res.json();
         setServerStatus(data);
+        setIsOnline(data.isServerOnline);
+        localStorage.setItem('server_online_state', String(data.isServerOnline));
         if (onStatusChange) onStatusChange(data.isServerOnline);
       }
     } catch (e) {
@@ -39,25 +46,28 @@ export const ServerPowerControl: React.FC<ServerPowerControlProps> = ({ onStatus
   }, []);
 
   const handleTogglePower = async () => {
-    if (!serverStatus) return;
-    const isCurrentlyOnline = serverStatus.isServerOnline;
-    const confirmMessage = isCurrentlyOnline
-      ? 'Are you sure you want to SHUTDOWN the server? All live streaming links and AI endpoints will be paused until you start it again.'
-      : 'Start server continuously in the background?';
-
-    if (!window.confirm(confirmMessage)) return;
+    const newOnlineState = !isOnline;
+    setIsOnline(newOnlineState);
+    localStorage.setItem('server_online_state', String(newOnlineState));
+    if (onStatusChange) onStatusChange(newOnlineState);
 
     setToggling(true);
     try {
-      const action = isCurrentlyOnline ? 'shutdown' : 'start';
-      const res = await fetch('/api/server/toggle', {
+      const action = newOnlineState ? 'start' : 'shutdown';
+      const toggleRes = await fetch('/api/server/toggle', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action }),
-      });
-      if (res.ok) {
-        await fetchServerStatus();
+      }).catch(() => null);
+
+      if (!newOnlineState) {
+        await fetch('/api/server/shutdown', { method: 'POST' }).catch(() => null);
+        await fetch('/api/server/stop', { method: 'POST' }).catch(() => null);
+      } else {
+        await fetch('/api/server/start', { method: 'POST' }).catch(() => null);
       }
+
+      await fetchServerStatus();
     } catch (e) {
       console.error('Failed to toggle server state', e);
     } finally {
@@ -83,7 +93,6 @@ export const ServerPowerControl: React.FC<ServerPowerControlProps> = ({ onStatus
 
   const publicInternetUrl = serverStatus?.urls?.publicUrl || window.location.origin;
   const primaryLanUrl = serverStatus?.urls?.lanUrls?.[0] || 'http://192.168.1.100:3000';
-  const isOnline = serverStatus?.isServerOnline ?? true;
 
   return (
     <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-5">
