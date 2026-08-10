@@ -269,30 +269,30 @@ export const GoogleDriveManager: React.FC<GoogleDriveManagerProps> = ({ user, on
         </div>
         <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
           <button
-            onClick={onLoginRequest}
-            className="inline-flex items-center space-x-2 px-6 py-3 bg-white hover:bg-slate-100 text-slate-900 font-semibold rounded-xl text-sm transition-all shadow-md"
-          >
-            <LogIn className="w-4 h-4 text-slate-900" />
-            <span>Sign in with Google (Popup)</span>
-          </button>
-          <button
             onClick={async () => {
-              const { signInWithFirebaseRedirectMode } = await import('../lib/firebase');
-              await signInWithFirebaseRedirectMode();
+              const { signInWithDirectGoogleOAuth } = await import('../lib/firebase');
+              signInWithDirectGoogleOAuth();
             }}
-            className="inline-flex items-center space-x-2 px-5 py-3 bg-emerald-700 hover:bg-emerald-600 text-white font-semibold rounded-xl text-sm transition-all shadow-md"
-            title="Sign in using full-page redirect (bypasses popup blockers)"
+            className="inline-flex items-center space-x-2 px-6 py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-sm transition-all shadow-md"
+            title="Direct Google OAuth (Works on GitHub Pages & Custom Domains)"
           >
             <LogIn className="w-4 h-4" />
-            <span>Sign in with Redirect (Full Page)</span>
+            <span>Direct Google Sign-In</span>
+          </button>
+          <button
+            onClick={onLoginRequest}
+            className="inline-flex items-center space-x-2 px-5 py-3 bg-white hover:bg-slate-100 text-slate-900 font-semibold rounded-xl text-sm transition-all shadow-md"
+          >
+            <LogIn className="w-4 h-4 text-slate-900" />
+            <span>Firebase Popup</span>
           </button>
           <button
             onClick={() => window.open(window.location.href, '_blank')}
-            className="inline-flex items-center space-x-2 px-5 py-3 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-medium rounded-xl text-sm transition-all"
-            title="Open application in a full browser tab for seamless Google OAuth login"
+            className="inline-flex items-center space-x-2 px-4 py-3 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-medium rounded-xl text-sm transition-all"
+            title="Open application in a full browser tab"
           >
             <ExternalLink className="w-4 h-4 text-slate-400" />
-            <span>Open in New Tab</span>
+            <span>New Tab</span>
           </button>
         </div>
         <div className="p-3 bg-slate-950/70 border border-slate-800 rounded-xl text-xs text-slate-400 max-w-lg mx-auto text-left">

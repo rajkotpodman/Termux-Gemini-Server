@@ -42,9 +42,84 @@ export interface FirebaseLoginResult {
 }
 
 /**
+ * Trigger Direct Google OAuth Flow (Bypasses Firebase auth/unauthorized-domain completely)
+ */
+export function signInWithDirectGoogleOAuth(): void {
+  const clientId = firebaseConfig.oAuthClientId || '384562200881-satjm3m2p0kp0ij5o9pa7o4atb3ouf2v.apps.googleusercontent.com';
+  const redirectUri = window.location.origin + window.location.pathname;
+  const scopes = [
+    'https://www.googleapis.com/auth/drive.file',
+    'https://www.googleapis.com/auth/drive.readonly',
+    'https://www.googleapis.com/auth/userinfo.email',
+    'https://www.googleapis.com/auth/userinfo.profile',
+    'openid'
+  ].join(' ');
+
+  const targetUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=token&scope=${encodeURIComponent(scopes)}&prompt=select_account`;
+  
+  window.location.href = targetUrl;
+}
+
+/**
+ * Check if user returned from Direct Google OAuth redirect with access token in URL hash
+ */
+export async function checkDirectOAuthHashResult(): Promise<FirebaseLoginResult | null> {
+  const hash = window.location.hash;
+  if (!hash || !hash.includes('access_token=')) {
+    return null;
+  }
+
+  const params = new URLSearchParams(hash.substring(1));
+  const accessToken = params.get('access_token');
+  if (!accessToken) return null;
+
+  try {
+    const response = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+      headers: { Authorization: `Bearer ${accessToken}` }
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to fetch user profile from Google');
+    }
+
+    const profile = await response.json();
+    const userPayload = {
+      id: profile.sub || profile.id || 'google_user',
+      email: profile.email || null,
+      name: profile.name || profile.given_name || 'Google User',
+      picture: profile.picture || null
+    };
+
+    localStorage.setItem('google_drive_access_token', accessToken);
+    localStorage.setItem('google_user', JSON.stringify(userPayload));
+
+    // Clear location hash without forcing a page reload
+    window.history.replaceState(null, '', window.location.pathname + window.location.search);
+
+    await fetch('/api/auth/firebase-sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user: userPayload, accessToken }),
+    }).catch(err => console.warn('Sync notice:', err));
+
+    return {
+      user: userPayload,
+      accessToken
+    };
+  } catch (err) {
+    console.warn('Direct OAuth hash parsing error:', err);
+    return null;
+  }
+}
+
+/**
  * Handle redirect result on initial page load
  */
 export async function checkFirebaseRedirectResult(): Promise<FirebaseLoginResult | null> {
+  // First check direct OAuth URL hash
+  const directResult = await checkDirectOAuthHashResult();
+  if (directResult) return directResult;
+
   try {
     const result = await getRedirectResult(auth);
     if (!result) return null;

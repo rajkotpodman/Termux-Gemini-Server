@@ -38,6 +38,7 @@ import { HealthStatus, GoogleUser } from './types';
 import { 
   signInWithFirebaseGoogle, 
   signInWithFirebaseRedirectMode,
+  signInWithDirectGoogleOAuth,
   checkFirebaseRedirectResult,
   logoutFirebase, 
   onAuthStateChanged, 
@@ -154,6 +155,13 @@ function MainAppContent() {
   const handleGoogleLogin = async () => {
     setAuthLoading(true);
     setAuthErrorModal(null);
+
+    // If hosted on GitHub Pages or custom domain, default directly to Direct Google OAuth
+    if (window.location.hostname.endsWith('github.io')) {
+      signInWithDirectGoogleOAuth();
+      return;
+    }
+
     try {
       // Primary Method: Firebase Popup Sign-In with Google Drive Scopes
       const result = await signInWithFirebaseGoogle();
@@ -174,6 +182,12 @@ function MainAppContent() {
 
       console.warn('Google Sign-In notice:', code, message);
 
+      // On unauthorized domain error, immediately fallback to Direct Google OAuth
+      if (code === 'auth/unauthorized-domain' || code === 'auth/popup-blocked') {
+        signInWithDirectGoogleOAuth();
+        return;
+      }
+
       // Try secondary backend URL if available
       try {
         const res = await fetch('/api/auth/google/url');
@@ -185,12 +199,8 @@ function MainAppContent() {
         }
       } catch {}
 
-      // If popup was blocked/closed or domain is unauthorized, open helpful modal
-      setAuthErrorModal({
-        code,
-        message,
-        domain
-      });
+      // Otherwise fallback to direct Google OAuth
+      signInWithDirectGoogleOAuth();
     } finally {
       setAuthLoading(false);
     }
@@ -486,28 +496,24 @@ function MainAppContent() {
 
             <div className="space-y-2 pt-1">
               <button
-                onClick={async () => {
+                onClick={() => {
                   setAuthErrorModal(null);
-                  try {
-                    await signInWithFirebaseRedirectMode();
-                  } catch (err: any) {
-                    alert('Redirect failed: ' + (err?.message || err));
-                  }
+                  signInWithDirectGoogleOAuth();
                 }}
-                className="w-full py-3 px-4 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-semibold text-xs transition-all shadow-md flex items-center justify-center space-x-2"
+                className="w-full py-3 px-4 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-bold text-xs transition-all shadow-md flex items-center justify-center space-x-2"
               >
                 <LogIn className="w-4 h-4" />
-                <span>⚡ Try Full-Page Redirect Sign-In (Bypasses Popups)</span>
+                <span>🚀 Direct Google Sign-In</span>
               </button>
 
               <button
                 onClick={() => {
                   window.open(window.location.href, '_blank');
                 }}
-                className="w-full py-2.5 px-4 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-xl font-medium text-xs transition-all flex items-center justify-center space-x-2"
+                className="w-full py-2.5 px-4 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 rounded-xl font-medium text-xs transition-all flex items-center justify-center space-x-2"
               >
-                <Globe className="w-4 h-4 text-slate-400" />
-                <span>Open Site in Standalone Tab</span>
+                <Globe className="w-3.5 h-3.5 text-slate-400" />
+                <span>Open Site in New Tab</span>
               </button>
             </div>
           </div>
