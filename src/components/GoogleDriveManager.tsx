@@ -130,13 +130,33 @@ export const GoogleDriveManager: React.FC<GoogleDriveManagerProps> = ({ user, on
     setError(null);
     setDeploySuccess(null);
     try {
+      const accessToken = getStoredDriveAccessToken();
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      };
+      if (accessToken) {
+        headers['Authorization'] = `Bearer ${accessToken}`;
+        headers['x-google-access-token'] = accessToken;
+      }
+
       const res = await fetch('/api/drive/import-folder', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({ folderId }),
       });
-      const data = await res.json();
-      if (res.ok && data.status === 'success') {
+      const contentType = res.headers.get('content-type') || '';
+      let data: any = {};
+      if (contentType.includes('application/json')) {
+        data = await res.json();
+      } else {
+        if (res.status === 401 || res.status === 403) {
+          throw new Error('Google Drive authorization required or expired. Click "Direct Google Sign-In" to re-authenticate.');
+        }
+        throw new Error(`Server returned non-JSON response (${res.status}). Please verify Google Drive sign-in.`);
+      }
+
+      if (res.ok && (data.status === 'success' || data.status === 'warning')) {
         setDeploySuccess(`🚀 ${data.message}`);
         setTimeout(() => setDeploySuccess(null), 6000);
       } else {
@@ -154,12 +174,32 @@ export const GoogleDriveManager: React.FC<GoogleDriveManagerProps> = ({ user, on
     setError(null);
     setDeploySuccess(null);
     try {
+      const accessToken = getStoredDriveAccessToken();
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      };
+      if (accessToken) {
+        headers['Authorization'] = `Bearer ${accessToken}`;
+        headers['x-google-access-token'] = accessToken;
+      }
+
       const res = await fetch('/api/drive/import-file', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({ fileId, fileName }),
       });
-      const data = await res.json();
+      const contentType = res.headers.get('content-type') || '';
+      let data: any = {};
+      if (contentType.includes('application/json')) {
+        data = await res.json();
+      } else {
+        if (res.status === 401 || res.status === 403) {
+          throw new Error('Google Drive authorization required or expired. Click "Direct Google Sign-In" to re-authenticate.');
+        }
+        throw new Error(`Server returned non-JSON response (${res.status}). Please verify Google Drive sign-in.`);
+      }
+
       if (res.ok && data.status === 'success') {
         setDeploySuccess(`⚡ Successfully deployed "${data.filename}" live! Stream link: ${data.liveUrl}`);
         setTimeout(() => setDeploySuccess(null), 6000);

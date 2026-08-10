@@ -92,7 +92,10 @@ export const LocalFolderDeployer: React.FC<LocalFolderDeployerProps> = ({ onOpen
     setDriveFolderError(null);
     try {
       const accessToken = getStoredDriveAccessToken();
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      };
       if (accessToken) {
         headers['Authorization'] = `Bearer ${accessToken}`;
         headers['x-google-access-token'] = accessToken;

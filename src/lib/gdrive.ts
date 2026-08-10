@@ -55,15 +55,36 @@ export function clearStoredDriveAccessToken(): void {
 }
 
 /**
+ * Safely parse JSON response after validating response Content-Type.
+ * Prevents SyntaxError: Unexpected token '<' on HTML redirect/error pages.
+ */
+export async function safeParseJsonResponse<T = any>(res: Response): Promise<T | null> {
+  const contentType = res.headers.get('content-type') || '';
+  if (!contentType.toLowerCase().includes('application/json')) {
+    console.warn(`[GDrive] Non-JSON response received (status ${res.status}): ${contentType}`);
+    return null;
+  }
+  try {
+    return await res.json();
+  } catch (err) {
+    console.warn('[GDrive] Failed to parse JSON payload:', err);
+    return null;
+  }
+}
+
+/**
  * Validate an access token with Google's tokeninfo endpoint
  */
 export async function validateAccessToken(token: string): Promise<{ valid: boolean; scope?: string; email?: string; expiresIn?: number }> {
   try {
-    const res = await fetch(`https://www.googleapis.com/oauth2/v3/tokeninfo?access_token=${encodeURIComponent(token)}`);
+    const res = await fetch(`https://www.googleapis.com/oauth2/v3/tokeninfo?access_token=${encodeURIComponent(token)}`, {
+      headers: { 'Accept': 'application/json' },
+    });
     if (!res.ok) {
       return { valid: false };
     }
-    const data = await res.json();
+    const data = await safeParseJsonResponse(res);
+    if (!data) return { valid: false };
     return {
       valid: true,
       scope: data.scope,
@@ -89,11 +110,13 @@ export function initiateGoogleDriveOAuth(clientId?: string): void {
 }
 
 /**
- * List Google Drive Folders
+ * List Google Drive Folders with explicit Accept: application/json header and robust response validation
  */
 export async function fetchGoogleDriveFolders(token?: string | null): Promise<DriveFolder[]> {
   const accessToken = token || getStoredDriveAccessToken();
-  const headers: Record<string, string> = {};
+  const headers: Record<string, string> = {
+    'Accept': 'application/json',
+  };
   if (accessToken) {
     headers['Authorization'] = `Bearer ${accessToken}`;
     headers['x-google-access-token'] = accessToken;
@@ -103,8 +126,8 @@ export async function fetchGoogleDriveFolders(token?: string | null): Promise<Dr
   try {
     const res = await fetch('/api/drive/folders', { headers });
     if (res.ok) {
-      const data = await res.json();
-      if (data.folders && Array.isArray(data.folders)) {
+      const data = await safeParseJsonResponse(res);
+      if (data && data.folders && Array.isArray(data.folders)) {
         return data.folders;
       }
     }
@@ -114,16 +137,25 @@ export async function fetchGoogleDriveFolders(token?: string | null): Promise<Dr
 
   // Attempt 2: Direct Google Drive REST API call
   if (accessToken) {
-    const q = encodeURIComponent("mimeType = 'application/vnd.google-apps.folder' and trashed = false");
-    const directRes = await fetch(
-      `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,mimeType,size,createdTime,modifiedTime)&pageSize=50&orderBy=name`,
-      {
-        headers: { Authorization: `Bearer ${accessToken}` },
+    try {
+      const q = encodeURIComponent("mimeType = 'application/vnd.google-apps.folder' and trashed = false");
+      const directRes = await fetch(
+        `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,mimeType,size,createdTime,modifiedTime)&pageSize=50&orderBy=name`,
+        {
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Accept': 'application/json',
+          },
+        }
+      );
+      if (directRes.ok) {
+        const directData = await safeParseJsonResponse(directRes);
+        if (directData) {
+          return directData.files || [];
+        }
       }
-    );
-    if (directRes.ok) {
-      const directData = await directRes.json();
-      return directData.files || [];
+    } catch (e) {
+      console.warn('[GDrive] Direct REST API list folders error:', e);
     }
   }
 
@@ -135,7 +167,10 @@ export async function fetchGoogleDriveFolders(token?: string | null): Promise<Dr
  */
 export async function createGoogleDriveFolder(folderName = 'Termux_Gemini_Live', token?: string | null): Promise<DriveFolder> {
   const accessToken = token || getStoredDriveAccessToken();
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    'Accept': 'application/json',
+  };
   if (accessToken) {
     headers['Authorization'] = `Bearer ${accessToken}`;
     headers['x-google-access-token'] = accessToken;
@@ -149,8 +184,8 @@ export async function createGoogleDriveFolder(folderName = 'Termux_Gemini_Live',
       body: JSON.stringify({ name: folderName }),
     });
     if (res.ok) {
-      const data = await res.json();
-      if (data.folder) return data.folder;
+      const data = await safeParseJsonResponse(res);
+      if (data && data.folder) return data.folder;
     }
   } catch (e) {
     console.warn('[GDrive] Server create folder endpoint failed, trying direct Google REST API', e);
@@ -163,6 +198,7 @@ export async function createGoogleDriveFolder(folderName = 'Termux_Gemini_Live',
       headers: {
         Authorization: `Bearer ${accessToken}`,
         'Content-Type': 'application/json',
+        'Accept': 'application/json',
       },
       body: JSON.stringify({
         name: folderName,
@@ -170,10 +206,10 @@ export async function createGoogleDriveFolder(folderName = 'Termux_Gemini_Live',
       }),
     });
     if (directRes.ok) {
-      const folderData = await directRes.json();
-      return folderData;
+      const folderData = await safeParseJsonResponse(directRes);
+      if (folderData) return folderData;
     }
-    const errData = await directRes.json().catch(() => ({}));
+    const errData = (await safeParseJsonResponse(directRes)) || {};
     throw new Error(errData.error?.message || 'Failed to create folder on Google Drive');
   }
 
@@ -185,7 +221,9 @@ export async function createGoogleDriveFolder(folderName = 'Termux_Gemini_Live',
  */
 export async function fetchGoogleDriveFiles(queryStr = '', token?: string | null): Promise<DriveFile[]> {
   const accessToken = token || getStoredDriveAccessToken();
-  const headers: Record<string, string> = {};
+  const headers: Record<string, string> = {
+    'Accept': 'application/json',
+  };
   if (accessToken) {
     headers['Authorization'] = `Bearer ${accessToken}`;
     headers['x-google-access-token'] = accessToken;
@@ -198,8 +236,8 @@ export async function fetchGoogleDriveFiles(queryStr = '', token?: string | null
     }
     const res = await fetch(url, { headers });
     if (res.ok) {
-      const data = await res.json();
-      if (data.files && Array.isArray(data.files)) {
+      const data = await safeParseJsonResponse(res);
+      if (data && data.files && Array.isArray(data.files)) {
         return data.files;
       }
     }
@@ -208,22 +246,30 @@ export async function fetchGoogleDriveFiles(queryStr = '', token?: string | null
   }
 
   if (accessToken) {
-    let driveUrl = 'https://www.googleapis.com/drive/v3/files?fields=files(id,name,mimeType,size,createdTime,modifiedTime,webViewLink,iconLink,thumbnailLink)&pageSize=50&orderBy=modifiedTime%20desc';
-    if (queryStr.trim()) {
-      const searchQuery = `name contains '${queryStr.trim().replace(/'/g, "\\'")}' and trashed = false`;
-      driveUrl += `&q=${encodeURIComponent(searchQuery)}`;
-    } else {
-      driveUrl += `&q=${encodeURIComponent('trashed = false')}`;
-    }
+    try {
+      let driveUrl = 'https://www.googleapis.com/drive/v3/files?fields=files(id,name,mimeType,size,createdTime,modifiedTime,webViewLink,iconLink,thumbnailLink)&pageSize=50&orderBy=modifiedTime%20desc';
+      if (queryStr.trim()) {
+        const searchQuery = `name contains '${queryStr.trim().replace(/'/g, "\\'")}' and trashed = false`;
+        driveUrl += `&q=${encodeURIComponent(searchQuery)}`;
+      } else {
+        driveUrl += `&q=${encodeURIComponent('trashed = false')}`;
+      }
 
-    const directRes = await fetch(driveUrl, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    });
-    if (directRes.ok) {
-      const directData = await directRes.json();
-      return directData.files || [];
+      const directRes = await fetch(driveUrl, {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Accept': 'application/json',
+        },
+      });
+      if (directRes.ok) {
+        const directData = await safeParseJsonResponse(directRes);
+        if (directData) return directData.files || [];
+      }
+    } catch (e) {
+      console.warn('[GDrive] Direct REST API list files error:', e);
     }
   }
 
   return [];
 }
+
