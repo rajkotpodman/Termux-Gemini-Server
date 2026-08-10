@@ -100,10 +100,9 @@ export async function validateGoogleApiResponse<T = any>(
 ): Promise<ValidatedApiResponse<T>> {
   const status = res.status;
   const contentType = res.headers.get('content-type') || '';
-  const is200Ok = res.ok && status >= 200 && status < 300;
   const isJson = contentType.toLowerCase().includes('application/json');
 
-  if (!is200Ok || !isJson) {
+  if (!isJson) {
     let rawResponseBody = '';
     try {
       rawResponseBody = await res.clone().text();
@@ -111,19 +110,21 @@ export async function validateGoogleApiResponse<T = any>(
       rawResponseBody = '[Unable to read raw body]';
     }
 
-    console.error(`[${actionLabel}] Response Middleware Validation Failed:`, {
+    console.error(`[${actionLabel}] Response Middleware Validation Failed (Non-JSON):`, {
       status,
       statusText: res.statusText,
       contentType,
-      is200Ok,
-      isJson,
       url: res.url,
       bodySnippet: rawResponseBody.slice(0, 1000),
     });
 
-    let notice = 'Server error, check console';
+    let notice = `Server returned status ${status} (Non-JSON).`;
     if (status === 401 || status === 403) {
-      notice = 'Google authentication required or expired. Please sign in with Google.';
+      notice = 'Google Drive authentication required or expired. Please sign in with Google.';
+    } else if (status === 405) {
+      notice = 'Method not allowed (HTTP 405). Please verify Google Drive sign-in or endpoint.';
+    } else if (status >= 500) {
+      notice = `Server error (${status}). Check console for details.`;
     }
 
     return {
@@ -136,6 +137,19 @@ export async function validateGoogleApiResponse<T = any>(
 
   try {
     const data = await res.json();
+    if (!res.ok) {
+      console.warn(`[${actionLabel}] API returned HTTP ${status} with JSON response:`, data);
+      let notice = data.message || data.error || `Request failed with status ${status}`;
+      if (status === 401 || status === 403) {
+        notice = 'Google Drive authentication required or expired. Please click "Direct Google Sign-In".';
+      }
+      return {
+        isValid: false,
+        data,
+        errorNotice: notice,
+        status,
+      };
+    }
     return {
       isValid: true,
       data,
@@ -150,11 +164,11 @@ export async function validateGoogleApiResponse<T = any>(
       rawText = '[Unable to read raw body]';
     }
 
-    console.error(`[${actionLabel}] Error parsing JSON despite application/json Content-Type:`, parseError, 'Raw body snippet:', rawText.slice(0, 1000));
+    console.error(`[${actionLabel}] Error parsing JSON payload:`, parseError, 'Raw body snippet:', rawText.slice(0, 1000));
     return {
       isValid: false,
       data: null,
-      errorNotice: 'Server error, check console',
+      errorNotice: 'Failed to parse response as JSON. Check console.',
       status,
     };
   }
