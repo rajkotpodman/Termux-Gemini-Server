@@ -19,6 +19,13 @@ import {
   Image as ImageIcon
 } from 'lucide-react';
 import { GoogleUser } from '../types';
+import { 
+  fetchGoogleDriveFolders, 
+  createGoogleDriveFolder, 
+  fetchGoogleDriveFiles, 
+  initiateGoogleDriveOAuth, 
+  getStoredDriveAccessToken 
+} from '../lib/gdrive';
 
 interface GoogleDriveManagerProps {
   user: GoogleUser | null;
@@ -68,39 +75,11 @@ export const GoogleDriveManager: React.FC<GoogleDriveManagerProps> = ({ user, on
     setError(null);
     setDeploySuccess(null);
     try {
-      const accessToken = localStorage.getItem('google_drive_access_token');
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
-
-      let res = await fetch('/api/drive/folders', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ name: folderName }),
-      }).catch(() => null);
-
-      if (!res || !res.ok) {
-        if (accessToken) {
-          res = await fetch('https://www.googleapis.com/drive/v3/files', {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${accessToken}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              name: folderName,
-              mimeType: 'application/vnd.google-apps.folder',
-            }),
-          });
-        }
-      }
-
-      if (res && res.ok) {
+      const folder = await createGoogleDriveFolder(folderName);
+      if (folder) {
         setDeploySuccess(`📁 Created Google Drive folder "${folderName}" successfully!`);
         setTimeout(() => setDeploySuccess(null), 5000);
         await fetchDriveFolders();
-      } else {
-        const errData = res ? await res.json().catch(() => ({})) : {};
-        setError(errData.error?.message || errData.message || 'Failed to create folder in Google Drive.');
       }
     } catch (err: any) {
       setError(err.message || 'Error creating Google Drive folder.');
@@ -113,36 +92,8 @@ export const GoogleDriveManager: React.FC<GoogleDriveManagerProps> = ({ user, on
     if (!user) return;
     setLoadingFolders(true);
     try {
-      const accessToken = localStorage.getItem('google_drive_access_token');
-      const headers: Record<string, string> = {};
-      if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
-
-      const res = await fetch('/api/drive/folders', { headers }).catch(() => null);
-      if (res && res.ok) {
-        const contentType = res.headers.get('content-type') || '';
-        if (contentType.includes('application/json')) {
-          const data = await res.json();
-          if (data.folders && Array.isArray(data.folders)) {
-            setFolders(data.folders);
-            return;
-          }
-        }
-      }
-
-      // Direct fallback to Google Drive REST API
-      if (accessToken) {
-        const q = encodeURIComponent("mimeType = 'application/vnd.google-apps.folder' and trashed = false");
-        const directRes = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,mimeType,size,createdTime,modifiedTime)&pageSize=50&orderBy=name`, {
-          headers: { Authorization: `Bearer ${accessToken}` },
-        });
-        if (directRes.ok) {
-          const directData = await directRes.json();
-          setFolders(directData.files || []);
-          return;
-        }
-      }
-
-      setFolders([]);
+      const folderList = await fetchGoogleDriveFolders();
+      setFolders(folderList as DriveFile[]);
     } catch (err) {
       console.error('Error fetching Drive folders:', err);
     } finally {
@@ -155,55 +106,10 @@ export const GoogleDriveManager: React.FC<GoogleDriveManagerProps> = ({ user, on
     setLoading(true);
     setError(null);
     try {
-      const accessToken = localStorage.getItem('google_drive_access_token');
-      const headers: Record<string, string> = {};
-      if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
-
-      let url = '/api/drive/files';
-      if (queryStr.trim()) {
-        url += `?q=${encodeURIComponent(queryStr.trim())}`;
-      }
-
-      const res = await fetch(url, { headers }).catch(() => null);
-      if (res && res.ok) {
-        const contentType = res.headers.get('content-type') || '';
-        if (contentType.includes('application/json')) {
-          const data = await res.json();
-          if (data.files && Array.isArray(data.files)) {
-            setFiles(data.files);
-            return;
-          }
-        }
-      }
-
-      // Direct fallback to Google Drive REST API
-      if (accessToken) {
-        let driveUrl = 'https://www.googleapis.com/drive/v3/files?fields=files(id,name,mimeType,size,createdTime,modifiedTime,webViewLink,iconLink,thumbnailLink)&pageSize=50&orderBy=modifiedTime%20desc';
-        if (queryStr.trim()) {
-          const searchQuery = `name contains '${queryStr.trim().replace(/'/g, "\\'")}' and trashed = false`;
-          driveUrl += `&q=${encodeURIComponent(searchQuery)}`;
-        } else {
-          driveUrl += `&q=${encodeURIComponent('trashed = false')}`;
-        }
-
-        const directRes = await fetch(driveUrl, {
-          headers: { Authorization: `Bearer ${accessToken}` },
-        });
-
-        if (directRes.ok) {
-          const directData = await directRes.json();
-          setFiles(directData.files || []);
-          return;
-        } else {
-          const errData = await directRes.json().catch(() => ({}));
-          if (directRes.status === 401) {
-            setError('Google session expired or required. Click "Direct Google Sign-In" to re-authenticate.');
-          } else {
-            setError(errData.error?.message || 'Failed to list Google Drive files.');
-          }
-        }
-      } else {
-        setError('Google authentication required. Click "Direct Google Sign-In" to authenticate.');
+      const fileList = await fetchGoogleDriveFiles(queryStr);
+      setFiles(fileList as DriveFile[]);
+      if (fileList.length === 0 && !getStoredDriveAccessToken()) {
+        setError('Google authentication required. Please sign in with Google to view files.');
       }
     } catch (err: any) {
       setError(err.message || 'Network error fetching Google Drive files.');

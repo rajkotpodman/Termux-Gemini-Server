@@ -1,7 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { FolderPlus, Video, Upload, CheckCircle2, Play, Copy, Trash2, Globe, Smartphone, RefreshCw, Layers, ExternalLink, ShieldCheck, Download, AlertCircle, Search, Link2, ListVideo, Sparkles, Radio, QrCode, X, Share2 } from 'lucide-react';
+import { FolderPlus, Video, Upload, CheckCircle2, Play, Copy, Trash2, Globe, Smartphone, RefreshCw, Layers, ExternalLink, ShieldCheck, Download, AlertCircle, Search, Link2, ListVideo, Sparkles, Radio, QrCode, X, Share2, Plus, LogIn } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { useTranslation } from '../lib/i18n';
+import { 
+  fetchGoogleDriveFolders, 
+  createGoogleDriveFolder, 
+  getStoredDriveAccessToken, 
+  initiateGoogleDriveOAuth 
+} from '../lib/gdrive';
 
 interface MediaFile {
   filename: string;
@@ -44,6 +50,7 @@ export const LocalFolderDeployer: React.FC<LocalFolderDeployerProps> = ({ onOpen
   const [isDriveFolderModalOpen, setIsDriveFolderModalOpen] = useState(false);
   const [driveFolders, setDriveFolders] = useState<Array<{ id: string; name: string }>>([]);
   const [loadingDriveFolders, setLoadingDriveFolders] = useState(false);
+  const [creatingDriveFolder, setCreatingDriveFolder] = useState(false);
   const [driveFolderError, setDriveFolderError] = useState<string | null>(null);
   const [importingDriveFolderId, setImportingDriveFolderId] = useState<string | null>(null);
 
@@ -52,18 +59,10 @@ export const LocalFolderDeployer: React.FC<LocalFolderDeployerProps> = ({ onOpen
     setLoadingDriveFolders(true);
     setDriveFolderError(null);
     try {
-      const res = await fetch('/api/drive/folders');
-      const contentType = res.headers.get('content-type') || '';
-      if (res.ok && contentType.includes('application/json')) {
-        const data = await res.json();
-        setDriveFolders(data.folders || []);
-      } else {
-        const data = await res.json().catch(() => ({}));
-        if (res.status === 401) {
-          setDriveFolderError('Google Drive authentication required. Please sign in via the Google Drive tab first.');
-        } else {
-          setDriveFolderError(data.error || data.message || 'Failed to list Google Drive folders.');
-        }
+      const folderList = await fetchGoogleDriveFolders();
+      setDriveFolders(folderList.map(f => ({ id: f.id, name: f.name })));
+      if (folderList.length === 0 && !getStoredDriveAccessToken()) {
+        setDriveFolderError('Google Drive authentication required. Please sign in with Google or create a folder.');
       }
     } catch (err: any) {
       setDriveFolderError(err.message || 'Network error fetching Google Drive folders.');
@@ -72,13 +71,35 @@ export const LocalFolderDeployer: React.FC<LocalFolderDeployerProps> = ({ onOpen
     }
   };
 
+  const handleCreateFolderInModal = async (folderName = 'Termux_Gemini_Live') => {
+    setCreatingDriveFolder(true);
+    setDriveFolderError(null);
+    try {
+      const newFolder = await createGoogleDriveFolder(folderName);
+      if (newFolder) {
+        await openDriveFolderModal();
+      }
+    } catch (err: any) {
+      setDriveFolderError(err.message || 'Failed to create folder in Google Drive.');
+    } finally {
+      setCreatingDriveFolder(false);
+    }
+  };
+
   const handleImportDriveFolder = async (folderId: string, folderName: string) => {
     setImportingDriveFolderId(folderId);
     setStatusMsg(`Importing files from Google Drive folder "${folderName}" to live server...`);
     try {
+      const accessToken = getStoredDriveAccessToken();
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (accessToken) {
+        headers['Authorization'] = `Bearer ${accessToken}`;
+        headers['x-google-access-token'] = accessToken;
+      }
+
       const res = await fetch('/api/drive/import-folder', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({ folderId }),
       });
       const data = await res.json();
@@ -976,44 +997,88 @@ export const LocalFolderDeployer: React.FC<LocalFolderDeployerProps> = ({ onOpen
                 <p className="text-xs font-mono">Fetching Google Drive folders...</p>
               </div>
             ) : driveFolders.length === 0 ? (
-              <div className="text-center py-8 text-slate-400 space-y-2">
-                <p className="text-sm">No Google Drive folders found.</p>
-                <p className="text-xs text-slate-500">Ensure you are signed in with Google and have created folders in your Google Drive account.</p>
+              <div className="text-center py-6 space-y-4">
+                <p className="text-sm text-slate-300">No Google Drive folders found in your account.</p>
+                <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                  Click below to create a dedicated hosting folder in your Google Drive or re-authenticate.
+                </p>
+                <div className="flex flex-col sm:flex-row items-center justify-center gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => handleCreateFolderInModal('Termux_Gemini_Live')}
+                    disabled={creatingDriveFolder}
+                    className="w-full sm:w-auto px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-800 text-white font-bold text-xs rounded-xl transition-all shadow-md flex items-center justify-center space-x-2"
+                  >
+                    {creatingDriveFolder ? (
+                      <>
+                        <RefreshCw className="w-4 h-4 animate-spin text-white" />
+                        <span>Creating Folder...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Plus className="w-4 h-4 text-white" />
+                        <span>➕ Create Live Folder in Google Drive</span>
+                      </>
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => initiateGoogleDriveOAuth()}
+                    className="w-full sm:w-auto px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white font-semibold text-xs rounded-xl transition-all shadow-md flex items-center justify-center space-x-2"
+                  >
+                    <LogIn className="w-4 h-4" />
+                    <span>Direct Google Sign-In</span>
+                  </button>
+                </div>
               </div>
             ) : (
-              <div className="max-h-72 overflow-y-auto space-y-2 pr-1">
-                {driveFolders.map((folder) => {
-                  const isImporting = importingDriveFolderId === folder.id;
-                  return (
-                    <div
-                      key={folder.id}
-                      className="p-3 bg-slate-950 border border-slate-800 hover:border-emerald-800 rounded-xl flex items-center justify-between transition-colors"
-                    >
-                      <div className="flex items-center space-x-3 min-w-0 pr-2">
-                        <FolderPlus className="w-5 h-5 text-amber-400 shrink-0" />
-                        <span className="text-sm font-semibold text-slate-200 truncate">{folder.name}</span>
-                      </div>
-
-                      <button
-                        onClick={() => handleImportDriveFolder(folder.id, folder.name)}
-                        disabled={isImporting}
-                        className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-800 text-white rounded-lg text-xs font-semibold font-mono shadow transition-all shrink-0 flex items-center space-x-1"
+              <div className="space-y-3">
+                <div className="flex items-center justify-between pb-1">
+                  <span className="text-xs font-mono text-slate-400">Available Folders ({driveFolders.length})</span>
+                  <button
+                    type="button"
+                    onClick={() => handleCreateFolderInModal('Termux_Gemini_Live')}
+                    disabled={creatingDriveFolder}
+                    className="px-2.5 py-1 bg-emerald-950/80 hover:bg-emerald-900 border border-emerald-800/80 text-emerald-300 rounded-lg text-xs font-semibold flex items-center space-x-1"
+                  >
+                    {creatingDriveFolder ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+                    <span>New Live Folder</span>
+                  </button>
+                </div>
+                <div className="max-h-64 overflow-y-auto space-y-2 pr-1">
+                  {driveFolders.map((folder) => {
+                    const isImporting = importingDriveFolderId === folder.id;
+                    return (
+                      <div
+                        key={folder.id}
+                        className="p-3 bg-slate-950 border border-slate-800 hover:border-emerald-800 rounded-xl flex items-center justify-between transition-colors"
                       >
-                        {isImporting ? (
-                          <>
-                            <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                            <span>Deploying...</span>
-                          </>
-                        ) : (
-                          <>
-                            <Upload className="w-3.5 h-3.5" />
-                            <span>Host Folder Live</span>
-                          </>
-                        )}
-                      </button>
-                    </div>
-                  );
-                })}
+                        <div className="flex items-center space-x-3 min-w-0 pr-2">
+                          <FolderPlus className="w-5 h-5 text-amber-400 shrink-0" />
+                          <span className="text-sm font-semibold text-slate-200 truncate">{folder.name}</span>
+                        </div>
+
+                        <button
+                          onClick={() => handleImportDriveFolder(folder.id, folder.name)}
+                          disabled={isImporting}
+                          className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-800 text-white rounded-lg text-xs font-semibold font-mono shadow transition-all shrink-0 flex items-center space-x-1"
+                        >
+                          {isImporting ? (
+                            <>
+                              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                              <span>Deploying...</span>
+                            </>
+                          ) : (
+                            <>
+                              <Upload className="w-3.5 h-3.5" />
+                              <span>Host Folder Live</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             )}
 
