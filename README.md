@@ -1,51 +1,61 @@
-# Termux Gemini Server ⚡📱
+# Termux Gemini Server ⚡📱 & 24/7 Folder Sync Engine
 
-> **24/7 Background Server & Media Streaming Host with Google Drive & Gemini AI**
+> **24/7 Background Micro-Server, Media Streaming Host, Google Drive & Syncthing/Rclone Folder Sync Manager with Gemini AI Acceleration**
 > 
 > **Package ID:** `com.termux.gemini.server` / `/`  
 > **App Name:** Termux Gemini Server  
 > **Short Name:** Termux Gemini  
+> **Live Demo / GitHub Pages:** `https://rajkotpodman.github.io/Termux-Gemini-Server/`
 
 ---
 
 ## 🌟 Overview
 
-**Termux Gemini Server** turns any Android device (or Termux instance / Node.js host) into a full-featured, persistent 24/7 background micro-server, REST API host, and personal cloud media stream server with built-in Google Drive storage management and server-side Gemini 2.5 AI acceleration.
+**Termux Gemini Server** turns any Android device (via Termux), Linux PC, macOS, or Windows host into a lightweight, persistent **24/7 background micro-server**, continuous **folder synchronization manager** (based on Syncthing / Rclone principles), and personal cloud media stream server powered by **Gemini 2.5 AI**.
 
-Designed for high portability, extreme memory efficiency, and robust background operation, this project bridges mobile hardware, cloud API capabilities, and PWA / Android APK packaging into one full-stack solution.
+It includes an instant **Master ON/OFF Security Switch** that generates or revokes encrypted temporary HTTPS links (via Cloudflared / Ngrok / LocalTunnel) and P2P Device IDs on demand.
 
 ---
 
 ## 🚀 Key Features
 
-* **⚡ Server Power & Background Engine**:
-  * Simulated & real-time server health monitoring (`/api/server/status`, `/api/server/toggle`).
-  * 24/7 Termux background daemon scripts (`termux-wake-lock`, `pm2`, `caddy`/`cloudflared`).
+* **🔄 24/7 Syncthing & Rclone Folder Sync Engine**:
+  * **Graphical Web GUI**: Select local device directories (`/sdcard/TermuxSync/Vault`) or Google Drive accounts (`gdrive:Backups`).
+  * **Master Security Switch**: Turn sync ON to spawn a temporary random HTTPS tunnel; turn sync OFF to immediately terminate the tunnel process and revoke all public file access.
+  * **Realtime Watcher & Sync Modes**: Supports **Two-Way Continuous Sync**, **Send-Only (Backup)**, and **Receive-Only (Mirror)**.
+  * **Peer-to-Peer Node Monitor**: Monitor connected Android, Desktop, and Cloud remote nodes with live latency and bandwidth metrics.
+
+* **⚡ 24/7 Background Server & Control**:
+  * Server health monitoring & remote toggle endpoints (`/api/server/status`, `/api/server/toggle`, `/api/sync/status`, `/api/sync/toggle`).
+  * Termux wake-lock daemon support (`termux-wake-lock`, `pm2`, `caddy`, `cloudflared`).
 
 * **🤖 Gemini 2.5 AI Proxy**:
   * Server-side secure endpoint (`/api/gemini/generate`) using `@google/genai`.
-  * Protects API keys from browser exposure.
+  * Protects API keys from browser leakage.
   * Live streaming and structured prompt playground.
 
-* **📁 Google Drive & Cloud File Management**:
-  * Real-time Google Workspace OAuth 2.0 integration (`/api/drive/files`).
-  * Search, stream, view, and manage remote Google Drive files directly inside the server console.
+* **📁 Google Drive & Cloud File Explorer**:
+  * OAuth 2.0 integration (`/api/drive/files`) to list, search, stream, and manage remote Google Drive files directly inside the GUI.
 
 * **📂 Local Folder Hosting & File Deployer**:
-  * Instant local static folder hosting and streaming.
-  * Direct browser file uploads (`/api/media/upload`) with persistent local storage.
+  * Instant static file hosting and streaming.
+  * Direct browser file uploads (`/api/media/upload`) with persistent local disk storage.
+
+* **🌐 GitHub Pages Compatible (Relative Path Architecture)**:
+  * Full support for GitHub Pages subpath hosting (`https://rajkotpodman.github.io/Termux-Gemini-Server/`).
+  * Configured with `base: './'`, relative asset links in `index.html`, and `sw.js` cache handling to prevent blank page issues.
 
 * **📱 Native Android APK & PWA Ready**:
   * Compliant `manifest.json` (`id: "/"`, `short_name: "Termux Gemini"`).
-  * Android WebView `MainActivity.kt` and `AndroidManifest.xml` boilerplate included.
-  * One-click download of full source code archive (`.ZIP`) for instant Git/Termux deployment or PWA Builder packaging.
+  * Includes Kotlin `MainActivity.kt` and `AndroidManifest.xml` templates for Android WebView wrapping.
+  * One-click `.ZIP` source export for instant Git/Termux deployment or PWABuilder packaging.
 
 ---
 
-## 🛠️ Architecture & Tech Stack
+## 🛠️ Tech Stack
 
-* **Frontend**: React 18, TypeScript, Vite, Tailwind CSS, Lucide React Icons, Motion animations.
-* **Backend**: Express.js (Node.js runtime or Termux node), bundled into ESM/CJS via `esbuild`.
+* **Frontend**: React 18, TypeScript, Vite (`base: './'`), Tailwind CSS, Lucide React Icons, QRCodeSVG, Motion.
+* **Backend / Core Engine**: Express.js (Node.js runtime / Termux), Python (FastAPI / Watchdog), Rclone / Syncthing CLI, Cloudflared / Ngrok tunneling.
 * **AI Engine**: `@google/genai` (Gemini 2.5 Flash / Pro).
 * **Storage & Auth**: Firebase Firestore + Google OAuth 2.0.
 
@@ -54,37 +64,40 @@ Designed for high portability, extreme memory efficiency, and robust background 
 ## 📂 Project Structure
 
 ```
-├── server.ts                  # Express Backend Server (API routes, Drive, Gemini, ZIP export)
+├── server.ts                       # Express Backend Server (API routes, Drive, Gemini, 24/7 Sync Engine)
+├── vite.config.ts                  # Vite Config (base: './' for GitHub Pages compatibility)
+├── index.html                      # HTML Entry Point with relative asset references
 ├── src/
-│   ├── App.tsx                # Main Dashboard UI & Tab Navigation
-│   ├── main.tsx               # Client Entry Point
-│   ├── components/            # Modular React UI Components
+│   ├── App.tsx                     # Main Dashboard & Navigation Tabs
+│   ├── main.tsx                    # React Client Entry
+│   ├── components/                 # Modular GUI Components
+│   │   ├── SyncthingRcloneManager.tsx # 24/7 Folder Sync & HTTPS Tunnel Manager
+│   │   ├── LocalFolderDeployer.tsx # Local File Hosting & Upload Manager
 │   │   ├── ApkBuildCenter.tsx      # Native Android APK & PWA Source Packaging
 │   │   ├── ServerPowerControl.tsx  # 24/7 Background Server Health & Toggle
 │   │   ├── GoogleDriveManager.tsx  # Google Drive OAuth File Explorer
 │   │   ├── ApiPlayground.tsx       # Interactive REST & Gemini API Tester
 │   │   ├── TermuxGuide.tsx         # Automated Termux Bash Commands & Install Scripts
-│   │   ├── LocalFolderDeployer.tsx # Local File Hosting & Upload Manager
 │   │   ├── CodeViewer.tsx          # Real-time Server Code Inspector
-│   │   └── ClientSnippets.tsx      # Python/cURL/JS Integration Code Snippets
+│   │   └── ClientSnippets.tsx      # Integration Code Snippets
 │   └── lib/
-│       ├── firebase.ts        # Firebase Auth & Firestore Client Config
-│       └── utils.ts           # Helper Utilities
+│       ├── firebase.ts             # Firebase Client Config
+│       └── utils.ts                # Helper Utilities
 ├── public/
-│   ├── manifest.json          # PWA Manifest (com.termux.gemini.server)
-│   ├── sw.js                  # Service Worker for Offline PWA Capabilities
-│   └── icon.svg               # Application Vector Logo
-├── metadata.json              # AI Studio Project Metadata
-├── .env.example               # Environment Variables Template
-├── package.json               # Dependencies & Build Scripts
-└── README.md                  # Project Documentation
+│   ├── manifest.json               # PWA Manifest (com.termux.gemini.server)
+│   ├── sw.js                       # Service Worker for Offline PWA Capabilities
+│   └── icon.svg                    # Vector Application Icon
+├── metadata.json                   # AI Studio App Metadata
+├── .env.example                    # Environment Variables Template
+├── package.json                    # Dependencies & Build Scripts
+└── README.md                       # Complete Project Documentation
 ```
 
 ---
 
 ## ⚙️ Environment Variables Setup
 
-Create a `.env` file in the project root based on `.env.example`:
+Create a `.env` file in the project root:
 
 ```env
 GOOGLE_CLIENT_ID=your_google_oauth_client_id
@@ -94,70 +107,83 @@ GEMINI_API_KEY=your_gemini_api_key
 
 ---
 
-## 💻 Local & Termux Installation Guide
+## 💻 Installation & Setup Guide
 
-### Option 1: Standard Node.js Environment
+### 1. Standard Node.js / Server Environment
 
 ```bash
-# 1. Clone your repository
-git clone <YOUR_GIT_REPO_URL>
-cd termux-gemini-server
+# Clone the repository
+git clone https://github.com/rajkotpodman/Termux-Gemini-Server.git
+cd Termux-Gemini-Server
 
-# 2. Install dependencies
+# Install dependencies
 npm install
 
-# 3. Start development server (Port 3000)
+# Start development server (Port 3000)
 npm run dev
 
-# 4. Production build & start
+# Build for production & start
 npm run build
 npm start
 ```
 
-### Option 2: Android Termux Deployment
+---
 
-Run these commands inside Termux on Android:
+### 2. Android Termux 24/7 Background Setup
+
+Run the following commands inside Android Termux:
 
 ```bash
-# Prevent Android system from putting Termux to sleep
+# 1. Acquire wake lock to keep Termux active in background
 termux-wake-lock
 
-# Update packages and install Node.js + Git
-pkg update -y && pkg install -y nodejs git
+# 2. Update Termux packages & install dependencies
+pkg update -y
+pkg install -y nodejs git python rclone cloudflared
 
-# Clone & Install
-git clone <YOUR_GIT_REPO_URL>
-cd termux-gemini-server
+# 3. Clone repository & install node modules
+git clone https://github.com/rajkotpodman/Termux-Gemini-Server.git
+cd Termux-Gemini-Server
 npm install
 
-# Build & Run in background using PM2
+# 4. Install PM2 for continuous background process execution
 npm install -g pm2
 npm run build
-pm2 start dist/server.cjs --name "termux-gemini"
+pm2 start dist/server.cjs --name "termux-gemini-sync"
 pm2 save
+```
+
+#### Auto-Start on Android Boot (Termux Boot Service)
+Create `~/.termux/boot/start-sync.sh`:
+```bash
+#!/usr/bin/env bash
+termux-wake-lock
+cd ~/Termux-Gemini-Server
+pm2 resurrect || node dist/server.cjs > ~/sync_server.log 2>&1 &
+```
+```bash
+chmod +x ~/.termux/boot/start-sync.sh
 ```
 
 ---
 
-## ⚡ Automated Multi-Platform GitHub Actions Workflows
+### 3. Deploying to GitHub Pages (Fixing Blank Pages)
 
-This repository contains pre-configured GitHub Actions workflows located in `.github/workflows/`:
+To publish this Web GUI manager on GitHub Pages without facing blank page errors:
 
-* **`build-android-apk.yml`**: Automatically builds Android `.apk` binaries using PWABuilder / TWA & Android SDK on every `push` to `main`.
-* **`build-desktop-apps.yml`**: Cross-platform matrix builder for desktop packages:
-  * 🪟 **Windows**: `.exe` Standalone Installer
-  * 🐧 **Linux**: `.deb` Debian Package
-  * 🍎 **macOS**: `.dmg` Disk Image
-* **`release-all.yml`**: Unified release pipeline that compiles and publishes all `.apk`, `.exe`, `.deb`, and `.dmg` binaries directly to GitHub Releases whenever a version tag (e.g. `v1.0.0`) is pushed.
-
----
-
-## 📦 PWA & Android APK Generation
-
-1. Open **APK & PWA Build Center** in the app UI.
-2. Click **Download Complete Code Base (.ZIP)** to download all project files.
-3. Use [PWABuilder.com](https://www.pwabuilder.com) with your host URL (`https://...`) to build a signed `.apk` or `.aab` file for Google Play / Android installation.
-4. Alternatively, wrap `MainActivity.kt` in Android Studio using the manifest provided in the APK tab.
+1. In `vite.config.ts`, ensure `base: './'` is configured.
+2. Build the static production bundle:
+   ```bash
+   npm run build
+   ```
+3. Deploy the contents of `dist/` to the `gh-pages` branch:
+   ```bash
+   git checkout -b gh-pages
+   git add dist -f
+   git commit -m "deploy: GitHub Pages release with relative asset paths"
+   git subtree push --prefix dist origin gh-pages
+   ```
+4. In GitHub Repository Settings -> Pages, select Source: `gh-pages` branch. Your app will load cleanly at: `https://rajkotpodman.github.io/Termux-Gemini-Server/`.
 
 ---
 
@@ -165,27 +191,24 @@ This repository contains pre-configured GitHub Actions workflows located in `.gi
 
 | Endpoint | Method | Description |
 | :--- | :--- | :--- |
-| `/api/server/status` | `GET` | Get current server uptime, health, and power state |
-| `/api/server/toggle` | `POST` | Turn server background processing ON / OFF |
-| `/api/gemini/generate` | `POST` | Send prompt payload to Gemini 2.5 Flash API |
-| `/api/drive/files` | `GET` | Search and list Google Drive files |
-| `/api/export-project-zip`| `GET` | Download full project source bundle as a `.zip` archive |
-| `/api/media/upload` | `POST` | Upload media files to local server disk |
+| `/api/sync/status` | `GET` | Get 24/7 folder sync state, active folder, and HTTPS tunnel URL |
+| `/api/sync/toggle` | `POST` | Turn sync engine ON/OFF and spawn/kill Cloudflared tunnel |
+| `/api/sync/peers` | `GET` | List connected P2P sync device nodes & latency metrics |
+| `/api/server/status` | `GET` | Check background server health & uptime |
+| `/api/server/toggle` | `POST` | Turn general server processing ON/OFF |
+| `/api/gemini/generate` | `POST` | Proxy prompt request to Gemini 2.5 Flash AI |
+| `/api/drive/files` | `GET` | Search and list Google Drive files via OAuth |
+| `/api/media/upload` | `POST` | Upload files directly to local storage disk |
+| `/api/export-project-zip`| `GET` | Download full project source as `.zip` archive |
 
 ---
 
-## 🤝 Git Push Checklist
+## 📦 Android APK & PWA Packaging
 
-To push this codebase to a new GitHub repository named `com.termux.gemini.server` or `termux-gemini-server`:
-
-```bash
-git init
-git add .
-git commit -m "feat: initial commit of Termux Gemini Server 24/7 background host"
-git branch -M main
-git remote add origin https://github.com/<YOUR_USERNAME>/termux-gemini-server.git
-git push -u origin main
-```
+1. Open the **APK & PWA Build Center** tab in the Web GUI.
+2. Click **Download Complete Code Base (.ZIP)**.
+3. Use [PWABuilder.com](https://www.pwabuilder.com) with your deployment URL (`https://rajkotpodman.github.io/Termux-Gemini-Server/`) to generate a signed Android `.apk` or `.aab` package.
+4. Or import the included Kotlin `MainActivity.kt` into Android Studio to compile natively.
 
 ---
 

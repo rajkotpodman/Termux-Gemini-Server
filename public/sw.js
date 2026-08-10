@@ -1,16 +1,16 @@
 // Service Worker for Termux Gemini Server PWA
-const CACHE_NAME = 'termux-gemini-v1';
+const CACHE_NAME = 'termux-gemini-v2';
 const ASSETS_TO_CACHE = [
-  '/',
-  '/index.html',
-  '/manifest.json',
-  '/icon.svg'
+  './',
+  './index.html',
+  './manifest.json',
+  './icon.svg'
 ];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(ASSETS_TO_CACHE);
+      return Promise.allSettled(ASSETS_TO_CACHE.map(url => cache.add(url)));
     }).then(() => self.skipWaiting())
   );
 });
