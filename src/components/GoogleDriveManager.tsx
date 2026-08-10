@@ -25,6 +25,8 @@ import {
   createGoogleDriveFolder, 
   fetchGoogleDriveFiles, 
   fetchGoogleDriveFolderFiles,
+  importGoogleDriveFolder,
+  importGoogleDriveFile,
   initiateGoogleDriveOAuth, 
   getStoredDriveAccessToken,
   safeParseJsonResponse,
@@ -156,29 +158,7 @@ export const GoogleDriveManager: React.FC<GoogleDriveManagerProps> = ({ user, on
     setError(null);
     setDeploySuccess(null);
     try {
-      const accessToken = getStoredDriveAccessToken();
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-      };
-      if (accessToken) {
-        headers['Authorization'] = `Bearer ${accessToken}`;
-        headers['x-google-access-token'] = accessToken;
-      }
-
-      const res = await fetch('/api/drive/import-folder', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ folderId }),
-      });
-
-      const validated = await validateGoogleApiResponse(res, 'handleImportFolder');
-      if (!validated.isValid) {
-        setError(validated.errorNotice || 'Server error, check console');
-        return;
-      }
-
-      const data = validated.data;
+      const data = await importGoogleDriveFolder(folderId, folderName);
       if (data && (data.status === 'success' || data.status === 'warning')) {
         setDeploySuccess(`🚀 ${data.message}`);
         setTimeout(() => setDeploySuccess(null), 6000);
@@ -194,7 +174,7 @@ export const GoogleDriveManager: React.FC<GoogleDriveManagerProps> = ({ user, on
           }).catch(e => console.warn('Firestore folder sync warning:', e));
         }
       } else {
-        setError(data?.message || data?.error || 'Failed to deploy folder from Google Drive');
+        setError(data?.message || 'Failed to deploy folder from Google Drive');
       }
     } catch (err: any) {
       setError(err.message || 'Error deploying Google Drive folder');
@@ -208,29 +188,7 @@ export const GoogleDriveManager: React.FC<GoogleDriveManagerProps> = ({ user, on
     setError(null);
     setDeploySuccess(null);
     try {
-      const accessToken = getStoredDriveAccessToken();
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-      };
-      if (accessToken) {
-        headers['Authorization'] = `Bearer ${accessToken}`;
-        headers['x-google-access-token'] = accessToken;
-      }
-
-      const res = await fetch('/api/drive/import-file', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ fileId, fileName }),
-      });
-
-      const validated = await validateGoogleApiResponse(res, 'handleImportFile');
-      if (!validated.isValid) {
-        setError(validated.errorNotice || 'Server error, check console');
-        return;
-      }
-
-      const data = validated.data;
+      const data = await importGoogleDriveFile(fileId, fileName);
       if (data && data.status === 'success') {
         setDeploySuccess(`⚡ Successfully deployed "${data.filename}" live! Stream link: ${data.liveUrl}`);
         setTimeout(() => setDeploySuccess(null), 6000);
@@ -248,10 +206,10 @@ export const GoogleDriveManager: React.FC<GoogleDriveManagerProps> = ({ user, on
           }).catch(e => console.warn('Firestore media sync warning:', e));
         }
       } else {
-        setError(data?.message || data?.error || 'Failed to deploy file');
+        setError(data?.message || 'Failed to deploy file');
       }
     } catch (err: any) {
-      setError(err.message || 'Error deploying file from Google Drive');
+      setError(err.message || 'Error deploying Google Drive file');
     } finally {
       setImportingFileId(null);
     }

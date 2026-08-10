@@ -424,3 +424,169 @@ export async function fetchGoogleDriveFolderFiles(folderId: string, token?: stri
   return [];
 }
 
+/**
+ * Import/Host Google Drive folder with automatic fallback to client-side Google Drive REST API
+ * if the backend server endpoint returns 405 (Static host like GitHub Pages) or is unreachable.
+ */
+export async function importGoogleDriveFolder(
+  folderId: string,
+  folderName: string,
+  token?: string | null
+): Promise<{ status: string; message: string; importedCount: number; files?: any[] }> {
+  const accessToken = token || getStoredDriveAccessToken();
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    'Accept': 'application/json',
+  };
+  if (accessToken) {
+    headers['Authorization'] = `Bearer ${accessToken}`;
+    headers['x-google-access-token'] = accessToken;
+  }
+
+  // Attempt 1: Express Server API
+  try {
+    const res = await fetch('/api/drive/import-folder', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ folderId }),
+    });
+
+    if (res.ok) {
+      const validated = await validateGoogleApiResponse(res, 'importGoogleDriveFolder');
+      if (validated.isValid && validated.data) {
+        return validated.data;
+      }
+    } else {
+      console.warn(`[GDrive] Server /api/drive/import-folder returned HTTP ${res.status}. Falling back to client-side Google Drive API.`);
+    }
+  } catch (err) {
+    console.warn('[GDrive] Server /api/drive/import-folder unreachable, using client-side fallback:', err);
+  }
+
+  // Attempt 2: Direct Google Drive REST API Fallback (for static hosts like GitHub Pages)
+  if (!accessToken) {
+    throw new Error('Google Drive authorization required. Please click "Direct Google Sign-In" to re-authenticate.');
+  }
+
+  const q = encodeURIComponent(`'${folderId.replace(/'/g, "\\'")}' in parents and trashed = false`);
+  const listUrl = `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,mimeType,size,webViewLink,webContentLink,thumbnailLink)&pageSize=100`;
+
+  const driveRes = await fetch(listUrl, {
+    headers: {
+      'Authorization': `Bearer ${accessToken}`,
+      'Accept': 'application/json',
+    },
+  });
+
+  if (!driveRes.ok) {
+    if (driveRes.status === 401 || driveRes.status === 403) {
+      throw new Error('Google Drive session expired. Please sign in with Google again.');
+    }
+    const errObj = await safeParseJsonResponse(driveRes);
+    throw new Error(errObj?.error?.message || `Google Drive API error (${driveRes.status}).`);
+  }
+
+  const listData = await safeParseJsonResponse(driveRes);
+  const files = listData?.files || [];
+
+  if (files.length === 0) {
+    return {
+      status: 'warning',
+      message: `No files found inside Google Drive folder "${folderName}".`,
+      importedCount: 0,
+      files: [],
+    };
+  }
+
+  // Format files as live deployment objects
+  const mappedFiles = files.map((f: any) => ({
+    id: f.id,
+    name: f.name,
+    mimeType: f.mimeType,
+    sizeMb: f.size ? (parseInt(f.size, 10) / (1024 * 1024)).toFixed(2) : '0.00',
+    liveUrl: f.webViewLink || `https://drive.google.com/file/d/${f.id}/view`,
+    streamUrl: f.webContentLink || `https://drive.google.com/uc?id=${f.id}&export=download`,
+  }));
+
+  return {
+    status: 'success',
+    message: `Hosted ${mappedFiles.length} file(s) from folder "${folderName}" live via Google Drive!`,
+    importedCount: mappedFiles.length,
+    files: mappedFiles,
+  };
+}
+
+/**
+ * Import/Host single Google Drive file with automatic fallback to client-side Google Drive REST API
+ */
+export async function importGoogleDriveFile(
+  fileId: string,
+  fileName?: string,
+  token?: string | null
+): Promise<{ status: string; filename: string; sizeMb: string; liveUrl: string; message: string }> {
+  const accessToken = token || getStoredDriveAccessToken();
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    'Accept': 'application/json',
+  };
+  if (accessToken) {
+    headers['Authorization'] = `Bearer ${accessToken}`;
+    headers['x-google-access-token'] = accessToken;
+  }
+
+  // Attempt 1: Server API
+  try {
+    const res = await fetch('/api/drive/import-file', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ fileId, fileName }),
+    });
+
+    if (res.ok) {
+      const validated = await validateGoogleApiResponse(res, 'importGoogleDriveFile');
+      if (validated.isValid && validated.data) {
+        return validated.data;
+      }
+    } else {
+      console.warn(`[GDrive] Server /api/drive/import-file returned HTTP ${res.status}. Falling back to client-side Google Drive API.`);
+    }
+  } catch (err) {
+    console.warn('[GDrive] Server /api/drive/import-file unreachable, using client-side fallback:', err);
+  }
+
+  // Attempt 2: Direct Google Drive REST API Fallback
+  if (!accessToken) {
+    throw new Error('Google Drive authorization required. Please click "Direct Google Sign-In" to re-authenticate.');
+  }
+
+  const fileUrl = `https://www.googleapis.com/drive/v3/files/${fileId}?fields=id,name,mimeType,size,webViewLink,webContentLink`;
+  const driveRes = await fetch(fileUrl, {
+    headers: {
+      'Authorization': `Bearer ${accessToken}`,
+      'Accept': 'application/json',
+    },
+  });
+
+  if (!driveRes.ok) {
+    if (driveRes.status === 401 || driveRes.status === 403) {
+      throw new Error('Google Drive session expired. Please sign in with Google again.');
+    }
+    const errObj = await safeParseJsonResponse(driveRes);
+    throw new Error(errObj?.error?.message || `Google Drive API error (${driveRes.status}).`);
+  }
+
+  const fileData = await safeParseJsonResponse(driveRes);
+  const name = fileData?.name || fileName || `drive_file_${fileId}`;
+  const sizeMb = fileData?.size ? (parseInt(fileData.size, 10) / (1024 * 1024)).toFixed(2) : '1.00';
+  const liveUrl = fileData?.webViewLink || fileData?.webContentLink || `https://drive.google.com/file/d/${fileId}/view`;
+
+  return {
+    status: 'success',
+    filename: name,
+    sizeMb,
+    liveUrl,
+    message: `Successfully deployed Google Drive file "${name}" live!`,
+  };
+}
+
+

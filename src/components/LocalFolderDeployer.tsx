@@ -6,6 +6,7 @@ import {
   fetchGoogleDriveFolders, 
   createGoogleDriveFolder, 
   fetchGoogleDriveFolderFiles,
+  importGoogleDriveFolder,
   getStoredDriveAccessToken, 
   initiateGoogleDriveOAuth,
   validateGoogleApiResponse
@@ -97,29 +98,7 @@ export const LocalFolderDeployer: React.FC<LocalFolderDeployerProps> = ({ onOpen
     setStatusMsg(`Importing files from Google Drive folder "${folderName}" to live server...`);
     setDriveFolderError(null);
     try {
-      const accessToken = getStoredDriveAccessToken();
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-      };
-      if (accessToken) {
-        headers['Authorization'] = `Bearer ${accessToken}`;
-        headers['x-google-access-token'] = accessToken;
-      }
-
-      const res = await fetch('/api/drive/import-folder', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ folderId }),
-      });
-
-      const validated = await validateGoogleApiResponse(res, 'LocalFolderDeployer.importFolder');
-      if (!validated.isValid) {
-        setDriveFolderError(validated.errorNotice || 'Server error deploying folder, check console.');
-        return;
-      }
-
-      const data = validated.data;
+      const data = await importGoogleDriveFolder(folderId, folderName);
       if (data && (data.status === 'success' || data.status === 'warning')) {
         setStatusMsg(`✅ ${data.message || 'Folder files imported successfully!'}`);
         setIsDriveFolderModalOpen(false);
@@ -135,7 +114,7 @@ export const LocalFolderDeployer: React.FC<LocalFolderDeployerProps> = ({ onOpen
           }).catch(e => console.warn('Firestore folder sync warning:', e));
         }
       } else {
-        setDriveFolderError(data?.message || data?.error || 'Failed to import Google Drive folder.');
+        setDriveFolderError(data?.message || 'Failed to import Google Drive folder.');
       }
     } catch (err: any) {
       setDriveFolderError(err.message || 'Error deploying Google Drive folder.');
