@@ -1041,15 +1041,27 @@ export const LocalFolderDeployer: React.FC<LocalFolderDeployerProps> = ({ onOpen
               <div className="space-y-3">
                 <div className="flex items-center justify-between pb-1">
                   <span className="text-xs font-mono text-slate-400">Available Folders ({driveFolders.length})</span>
-                  <button
-                    type="button"
-                    onClick={() => handleCreateFolderInModal('Termux_Gemini_Live')}
-                    disabled={creatingDriveFolder}
-                    className="px-2.5 py-1 bg-emerald-950/80 hover:bg-emerald-900 border border-emerald-800/80 text-emerald-300 rounded-lg text-xs font-semibold flex items-center space-x-1"
-                  >
-                    {creatingDriveFolder ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
-                    <span>New Live Folder</span>
-                  </button>
+                  <div className="flex space-x-2">
+                    <button
+                      type="button"
+                      onClick={() => initiateGoogleDriveOAuth()}
+                      title="Direct Google OAuth"
+                      className="px-2.5 py-1 bg-cyan-950/80 hover:bg-cyan-900 border border-cyan-800/80 text-cyan-300 rounded-lg text-xs font-semibold flex items-center space-x-1"
+                    >
+                      <LogIn className="w-3.5 h-3.5" />
+                      <span className="hidden sm:inline">Direct Sign-In</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleCreateFolderInModal('Termux_Gemini_Live')}
+                      disabled={creatingDriveFolder}
+                      className="px-2.5 py-1 bg-emerald-950/80 hover:bg-emerald-900 border border-emerald-800/80 text-emerald-300 rounded-lg text-xs font-semibold flex items-center space-x-1"
+                    >
+                      {creatingDriveFolder ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+                      <span className="hidden sm:inline">New Live Folder</span>
+                      <span className="sm:hidden">New</span>
+                    </button>
+                  </div>
                 </div>
                 <div className="max-h-64 overflow-y-auto space-y-2 pr-1">
                   {driveFolders.map((folder) => {

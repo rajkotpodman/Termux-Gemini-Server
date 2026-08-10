@@ -454,14 +454,23 @@ export const GoogleDriveManager: React.FC<GoogleDriveManagerProps> = ({ user, on
               {folders.length} Folders
             </span>
           </div>
-          <button
-            onClick={fetchDriveFolders}
-            disabled={loadingFolders}
-            className="text-xs text-slate-400 hover:text-emerald-400 flex items-center space-x-1"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${loadingFolders ? 'animate-spin text-emerald-400' : ''}`} />
-            <span>Refresh Folders</span>
-          </button>
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={() => initiateGoogleDriveOAuth()}
+              className="text-xs px-2.5 py-1 bg-cyan-950/80 hover:bg-cyan-900 border border-cyan-800/80 text-cyan-300 rounded-lg font-semibold flex items-center space-x-1"
+            >
+              <LogIn className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Direct Sign-In</span>
+            </button>
+            <button
+              onClick={fetchDriveFolders}
+              disabled={loadingFolders}
+              className="text-xs px-2.5 py-1 text-slate-400 hover:text-emerald-400 border border-transparent flex items-center space-x-1"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${loadingFolders ? 'animate-spin text-emerald-400' : ''}`} />
+              <span className="hidden sm:inline">Refresh</span>
+            </button>
+          </div>
         </div>
 
         {loadingFolders ? (
