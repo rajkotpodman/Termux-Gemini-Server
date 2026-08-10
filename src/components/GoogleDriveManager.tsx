@@ -24,7 +24,9 @@ import {
   createGoogleDriveFolder, 
   fetchGoogleDriveFiles, 
   initiateGoogleDriveOAuth, 
-  getStoredDriveAccessToken 
+  getStoredDriveAccessToken,
+  safeParseJsonResponse,
+  validateGoogleApiResponse
 } from '../lib/gdrive';
 
 interface GoogleDriveManagerProps {
@@ -145,22 +147,19 @@ export const GoogleDriveManager: React.FC<GoogleDriveManagerProps> = ({ user, on
         headers,
         body: JSON.stringify({ folderId }),
       });
-      const contentType = res.headers.get('content-type') || '';
-      let data: any = {};
-      if (contentType.includes('application/json')) {
-        data = await res.json();
-      } else {
-        if (res.status === 401 || res.status === 403) {
-          throw new Error('Google Drive authorization required or expired. Click "Direct Google Sign-In" to re-authenticate.');
-        }
-        throw new Error(`Server returned non-JSON response (${res.status}). Please verify Google Drive sign-in.`);
+
+      const validated = await validateGoogleApiResponse(res, 'handleImportFolder');
+      if (!validated.isValid) {
+        setError(validated.errorNotice || 'Server error, check console');
+        return;
       }
 
-      if (res.ok && (data.status === 'success' || data.status === 'warning')) {
+      const data = validated.data;
+      if (data && (data.status === 'success' || data.status === 'warning')) {
         setDeploySuccess(`🚀 ${data.message}`);
         setTimeout(() => setDeploySuccess(null), 6000);
       } else {
-        setError(data.message || data.error || 'Failed to deploy folder from Google Drive');
+        setError(data?.message || data?.error || 'Failed to deploy folder from Google Drive');
       }
     } catch (err: any) {
       setError(err.message || 'Error deploying Google Drive folder');
@@ -189,22 +188,19 @@ export const GoogleDriveManager: React.FC<GoogleDriveManagerProps> = ({ user, on
         headers,
         body: JSON.stringify({ fileId, fileName }),
       });
-      const contentType = res.headers.get('content-type') || '';
-      let data: any = {};
-      if (contentType.includes('application/json')) {
-        data = await res.json();
-      } else {
-        if (res.status === 401 || res.status === 403) {
-          throw new Error('Google Drive authorization required or expired. Click "Direct Google Sign-In" to re-authenticate.');
-        }
-        throw new Error(`Server returned non-JSON response (${res.status}). Please verify Google Drive sign-in.`);
+
+      const validated = await validateGoogleApiResponse(res, 'handleImportFile');
+      if (!validated.isValid) {
+        setError(validated.errorNotice || 'Server error, check console');
+        return;
       }
 
-      if (res.ok && data.status === 'success') {
+      const data = validated.data;
+      if (data && data.status === 'success') {
         setDeploySuccess(`⚡ Successfully deployed "${data.filename}" live! Stream link: ${data.liveUrl}`);
         setTimeout(() => setDeploySuccess(null), 6000);
       } else {
-        setError(data.message || data.error || 'Failed to deploy file');
+        setError(data?.message || data?.error || 'Failed to deploy file');
       }
     } catch (err: any) {
       setError(err.message || 'Error deploying file from Google Drive');
@@ -225,9 +221,19 @@ export const GoogleDriveManager: React.FC<GoogleDriveManagerProps> = ({ user, on
     setError(null);
 
     try {
+      const accessToken = getStoredDriveAccessToken();
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      };
+      if (accessToken) {
+        headers['Authorization'] = `Bearer ${accessToken}`;
+        headers['x-google-access-token'] = accessToken;
+      }
+
       const res = await fetch('/api/drive/files', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({
           name: newFileName.trim(),
           content: newFileContent,
@@ -235,18 +241,14 @@ export const GoogleDriveManager: React.FC<GoogleDriveManagerProps> = ({ user, on
         })
       });
 
-      const data = await res.json();
-      if (res.ok) {
+      const validated = await validateGoogleApiResponse(res, 'handleCreateFile');
+      if (validated.isValid && validated.data) {
         setIsCreateOpen(false);
         setNewFileName('Termux_Gemini_Notes.txt');
         setNewFileContent('');
         fetchDriveFiles(searchQuery);
       } else {
-        if (res.status === 401) {
-          setError('Google authentication expired or required. Please sign in with Google.');
-        } else {
-          setError(data.error || 'Failed to create file in Google Drive');
-        }
+        setError(validated.errorNotice || 'Server error, check console');
       }
     } catch (err: any) {
       setError(err.message || 'Error creating file');
@@ -260,21 +262,28 @@ export const GoogleDriveManager: React.FC<GoogleDriveManagerProps> = ({ user, on
     setDeleting(true);
     setError(null);
     try {
+      const accessToken = getStoredDriveAccessToken();
+      const headers: Record<string, string> = {
+        'Accept': 'application/json',
+      };
+      if (accessToken) {
+        headers['Authorization'] = `Bearer ${accessToken}`;
+        headers['x-google-access-token'] = accessToken;
+      }
+
       const res = await fetch(`/api/drive/files/${fileToDelete.id}`, {
-        method: 'DELETE'
+        method: 'DELETE',
+        headers,
       });
-      const data = await res.json();
-      if (res.ok) {
+
+      const validated = await validateGoogleApiResponse(res, 'handleDeleteConfirmed');
+      if (validated.isValid) {
         setDeleteSuccess(`Successfully removed "${fileToDelete.name}" from Google Drive.`);
         setTimeout(() => setDeleteSuccess(null), 4000);
         setFileToDelete(null);
         fetchDriveFiles(searchQuery);
       } else {
-        if (res.status === 401) {
-          setError('Google authentication expired or required. Please sign in with Google.');
-        } else {
-          setError(data.error || 'Failed to delete file.');
-        }
+        setError(validated.errorNotice || 'Server error, check console');
       }
     } catch (err: any) {
       setError(err.message || 'Error deleting file');

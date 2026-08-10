@@ -58,17 +58,105 @@ export function clearStoredDriveAccessToken(): void {
  * Safely parse JSON response after validating response Content-Type.
  * Prevents SyntaxError: Unexpected token '<' on HTML redirect/error pages.
  */
-export async function safeParseJsonResponse<T = any>(res: Response): Promise<T | null> {
+export async function safeParseJsonResponse<T = any>(res: Response, label = 'GDrive'): Promise<T | null> {
   const contentType = res.headers.get('content-type') || '';
   if (!contentType.toLowerCase().includes('application/json')) {
-    console.warn(`[GDrive] Non-JSON response received (status ${res.status}): ${contentType}`);
+    try {
+      const rawText = await res.clone().text();
+      console.warn(`[${label}] Non-JSON response received (status ${res.status}, Content-Type: '${contentType}'). Raw body snippet:`, rawText.slice(0, 500));
+    } catch {
+      console.warn(`[${label}] Non-JSON response received (status ${res.status}, Content-Type: '${contentType}'). Unable to read body.`);
+    }
     return null;
   }
   try {
     return await res.json();
   } catch (err) {
-    console.warn('[GDrive] Failed to parse JSON payload:', err);
+    try {
+      const rawText = await res.clone().text();
+      console.warn(`[${label}] Failed to parse JSON payload (status ${res.status}):`, err, 'Raw body snippet:', rawText.slice(0, 500));
+    } catch {
+      console.warn(`[${label}] Failed to parse JSON payload (status ${res.status}):`, err);
+    }
     return null;
+  }
+}
+
+export interface ValidatedApiResponse<T = any> {
+  isValid: boolean;
+  data: T | null;
+  errorNotice: string | null;
+  status: number;
+}
+
+/**
+ * Middleware validation layer for Google API & server responses.
+ * Checks if status is 200 (or OK in 200-299 range) and explicitly verifies 'Content-Type' includes 'application/json'.
+ * If invalid, logs detailed error info to console and returns a user-facing notice ('Server error, check console').
+ */
+export async function validateGoogleApiResponse<T = any>(
+  res: Response,
+  actionLabel = 'Google API'
+): Promise<ValidatedApiResponse<T>> {
+  const status = res.status;
+  const contentType = res.headers.get('content-type') || '';
+  const is200Ok = res.ok && status >= 200 && status < 300;
+  const isJson = contentType.toLowerCase().includes('application/json');
+
+  if (!is200Ok || !isJson) {
+    let rawResponseBody = '';
+    try {
+      rawResponseBody = await res.clone().text();
+    } catch {
+      rawResponseBody = '[Unable to read raw body]';
+    }
+
+    console.error(`[${actionLabel}] Response Middleware Validation Failed:`, {
+      status,
+      statusText: res.statusText,
+      contentType,
+      is200Ok,
+      isJson,
+      url: res.url,
+      bodySnippet: rawResponseBody.slice(0, 1000),
+    });
+
+    let notice = 'Server error, check console';
+    if (status === 401 || status === 403) {
+      notice = 'Google authentication required or expired. Please sign in with Google.';
+    }
+
+    return {
+      isValid: false,
+      data: null,
+      errorNotice: notice,
+      status,
+    };
+  }
+
+  try {
+    const data = await res.json();
+    return {
+      isValid: true,
+      data,
+      errorNotice: null,
+      status,
+    };
+  } catch (parseError) {
+    let rawText = '';
+    try {
+      rawText = await res.clone().text();
+    } catch {
+      rawText = '[Unable to read raw body]';
+    }
+
+    console.error(`[${actionLabel}] Error parsing JSON despite application/json Content-Type:`, parseError, 'Raw body snippet:', rawText.slice(0, 1000));
+    return {
+      isValid: false,
+      data: null,
+      errorNotice: 'Server error, check console',
+      status,
+    };
   }
 }
 
