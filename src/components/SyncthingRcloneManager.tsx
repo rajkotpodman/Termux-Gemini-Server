@@ -29,9 +29,13 @@ import {
   Settings,
   Server,
   X,
-  Play
+  Play,
+  Cloud,
+  LogIn,
+  Folder
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
+import { initiateGoogleDriveOAuth, fetchGoogleDriveFolders, DriveFolder } from '../lib/gdrive';
 
 interface PeerDevice {
   id: string;
@@ -62,11 +66,53 @@ export const SyncthingRcloneManager: React.FC = () => {
   const [localFolderPath, setLocalFolderPath] = useState<string>('/sdcard/TermuxSync/Vault');
   const [gdriveFolder, setGdriveFolder] = useState<string>('gdrive:TermuxSync/Backups');
   const [tunnelProvider, setTunnelProvider] = useState<'cloudflared' | 'localtunnel' | 'ngrok'>('cloudflared');
+  const [linkProtocol, setLinkProtocol] = useState<'direct' | 'cloudflared' | 'lan'>('direct');
   
   // Real-time Tunnel & Security credentials
-  const [tunnelUrl, setTunnelUrl] = useState<string>('https://sync-vault-9f8a72b1.trycloudflare.com/share/a89f71b2e910');
+  const [shareHash, setShareHash] = useState<string>('a89f71b2e910');
+  const [tunnelUrl, setTunnelUrl] = useState<string>('');
   const [deviceId, setDeviceId] = useState<string>('SYNC-NODE-78A9-98F1-4B2E-3C1A-8971-5E3D');
   const [secretKey, setSecretKey] = useState<string>('sk_live_98f1a4b2c3d4e5f67890');
+
+  // Google Drive folders loaded live
+  const [driveFolders, setDriveFolders] = useState<DriveFolder[]>([]);
+  const [loadingDriveFolders, setLoadingDriveFolders] = useState<boolean>(false);
+  const [driveFolderNotice, setDriveFolderNotice] = useState<string>('');
+
+  // Compute active working URL whenever linkProtocol or shareHash changes
+  useEffect(() => {
+    const origin = typeof window !== 'undefined' ? window.location.origin : '';
+    const pathname = typeof window !== 'undefined' ? window.location.pathname : '';
+
+    if (linkProtocol === 'direct') {
+      setTunnelUrl(`${origin}${pathname}?share=${shareHash}`);
+    } else if (linkProtocol === 'cloudflared') {
+      setTunnelUrl(`https://sync-vault-${shareHash.substring(0, 6)}.trycloudflare.com/share/${shareHash}`);
+    } else if (linkProtocol === 'lan') {
+      const hostname = typeof window !== 'undefined' ? window.location.hostname : '192.168.1.100';
+      setTunnelUrl(`http://${hostname}:3000/?share=${shareHash}`);
+    }
+  }, [linkProtocol, shareHash]);
+
+  // Load Google Drive folders if user picks gdrive source
+  const loadUserDriveFolders = async () => {
+    setLoadingDriveFolders(true);
+    setDriveFolderNotice('');
+    try {
+      const res = await fetchGoogleDriveFolders();
+      if (res && res.length > 0) {
+        setDriveFolders(res);
+        setDriveFolderNotice(`Loaded ${res.length} Google Drive folders.`);
+      } else {
+        setDriveFolders([]);
+        setDriveFolderNotice('No Google Drive folders found. Please click "Direct Sign-In" to authorize.');
+      }
+    } catch (e: any) {
+      setDriveFolderNotice(e.message || 'Error fetching Google Drive folders.');
+    } finally {
+      setLoadingDriveFolders(false);
+    }
+  };
   
   // Stats
   const [bandwidthUp, setBandwidthUp] = useState<number>(3.8); // MB/s
@@ -132,10 +178,9 @@ export const SyncthingRcloneManager: React.FC = () => {
     setIsSyncActive(nextState);
 
     if (nextState) {
-      // Re-generate long secure random HTTPS tunnel link
-      const randomHash = Math.random().toString(36).substring(2, 12);
-      const randomSubdomain = 'sync-vault-' + Math.random().toString(36).substring(2, 8);
-      setTunnelUrl(`https://${randomSubdomain}.trycloudflare.com/share/${randomHash}`);
+      // Re-generate long secure random HTTPS tunnel link hash
+      const newHash = Math.random().toString(36).substring(2, 12);
+      setShareHash(newHash);
       
       // Post state to backend server
       try {
@@ -425,12 +470,55 @@ echo "✅ Termux Boot Auto-Start Service Configured!"`
             <div className="mt-4 space-y-4">
               {isSyncActive ? (
                 <>
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-mono text-slate-300 flex items-center justify-between">
-                      <span>Random Encrypted HTTPS Link (Cloudflared / Ngrok)</span>
-                      <span className="text-[10px] text-emerald-400 font-semibold">🔒 TLS 1.3 Encrypted</span>
-                    </label>
-                    <div className="flex items-center space-x-2">
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-mono text-slate-300">
+                        Share & Streaming Protocol
+                      </label>
+                      <span className="text-[10px] text-emerald-400 font-semibold font-mono">🔒 TLS 1.3 Encrypted</span>
+                    </div>
+
+                    {/* Protocol Switcher */}
+                    <div className="grid grid-cols-3 gap-2 p-1 bg-slate-950 border border-slate-800 rounded-xl text-xs font-mono">
+                      <button
+                        type="button"
+                        onClick={() => setLinkProtocol('direct')}
+                        className={`py-1.5 px-2 rounded-lg font-semibold flex items-center justify-center space-x-1 transition-all ${
+                          linkProtocol === 'direct'
+                            ? 'bg-indigo-600 text-white shadow'
+                            : 'text-slate-400 hover:text-slate-200'
+                        }`}
+                      >
+                        <Globe className="w-3.5 h-3.5" />
+                        <span className="truncate">Direct Web</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setLinkProtocol('cloudflared')}
+                        className={`py-1.5 px-2 rounded-lg font-semibold flex items-center justify-center space-x-1 transition-all ${
+                          linkProtocol === 'cloudflared'
+                            ? 'bg-indigo-600 text-white shadow'
+                            : 'text-slate-400 hover:text-slate-200'
+                        }`}
+                      >
+                        <ShieldCheck className="w-3.5 h-3.5" />
+                        <span className="truncate">Cloudflared</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setLinkProtocol('lan')}
+                        className={`py-1.5 px-2 rounded-lg font-semibold flex items-center justify-center space-x-1 transition-all ${
+                          linkProtocol === 'lan'
+                            ? 'bg-indigo-600 text-white shadow'
+                            : 'text-slate-400 hover:text-slate-200'
+                        }`}
+                      >
+                        <Radio className="w-3.5 h-3.5" />
+                        <span className="truncate">Wi-Fi LAN</span>
+                      </button>
+                    </div>
+
+                    <div className="flex items-center space-x-2 pt-1">
                       <input
                         type="text"
                         readOnly
@@ -438,13 +526,25 @@ echo "✅ Termux Boot Auto-Start Service Configured!"`
                         className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs font-mono text-indigo-300 selection:bg-indigo-500 selection:text-white focus:outline-none"
                       />
                       <button
+                        type="button"
                         onClick={() => copyToClipboard(tunnelUrl, 'url')}
-                        className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-semibold font-mono flex items-center space-x-1.5 shrink-0 transition-all shadow-md"
+                        className="px-3.5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-semibold font-mono flex items-center space-x-1.5 shrink-0 transition-all shadow-md"
                       >
                         {copiedUrl ? <CheckCircle2 className="w-4 h-4 text-emerald-300" /> : <Copy className="w-4 h-4" />}
-                        <span>{copiedUrl ? 'Copied!' : 'Copy Link'}</span>
+                        <span>{copiedUrl ? 'Copied!' : 'Copy'}</span>
                       </button>
+                      <a
+                        href={tunnelUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="px-3 py-2.5 bg-cyan-600 hover:bg-cyan-500 text-white rounded-xl text-xs font-semibold shrink-0 transition-all flex items-center space-x-1 shadow-md"
+                        title="Open Share Link in New Tab"
+                      >
+                        <ExternalLink className="w-4 h-4" />
+                        <span className="hidden sm:inline">Open</span>
+                      </a>
                       <button
+                        type="button"
                         onClick={() => setShowQrModal(true)}
                         className="px-3 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-xl text-xs font-semibold shrink-0 transition-all"
                         title="Show QR Code for Smart Phones & Tablets"
@@ -460,6 +560,7 @@ echo "✅ Termux Boot Auto-Start Service Configured!"`
                       <div className="text-[11px] font-mono text-slate-400 flex items-center justify-between">
                         <span>Syncthing P2P Device ID</span>
                         <button
+                          type="button"
                           onClick={() => copyToClipboard(deviceId, 'device')}
                           className="text-indigo-400 hover:text-indigo-300 text-[10px] font-bold"
                         >
@@ -499,6 +600,7 @@ echo "✅ Termux Boot Auto-Start Service Configured!"`
             {/* Source Type Toggle */}
             <div className="grid grid-cols-2 gap-3 p-1 bg-slate-950 border border-slate-800 rounded-xl font-mono text-xs">
               <button
+                type="button"
                 onClick={() => setSourceType('local')}
                 className={`py-2 px-4 rounded-lg font-semibold flex items-center justify-center space-x-2 transition-all ${
                   sourceType === 'local'
@@ -511,14 +613,18 @@ echo "✅ Termux Boot Auto-Start Service Configured!"`
               </button>
 
               <button
-                onClick={() => setSourceType('gdrive')}
+                type="button"
+                onClick={() => {
+                  setSourceType('gdrive');
+                  if (driveFolders.length === 0) loadUserDriveFolders();
+                }}
                 className={`py-2 px-4 rounded-lg font-semibold flex items-center justify-center space-x-2 transition-all ${
                   sourceType === 'gdrive'
                     ? 'bg-indigo-600 text-white shadow-md'
                     : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
-                <CloudIcon className="w-4 h-4" />
+                <Cloud className="w-4 h-4" />
                 <span>Google Drive Account</span>
               </button>
             </div>
@@ -536,6 +642,7 @@ echo "✅ Termux Boot Auto-Start Service Configured!"`
                     placeholder="/sdcard/SyncFolder or /home/user/Documents"
                   />
                   <button
+                    type="button"
                     onClick={() => alert(`Selected path: ${localFolderPath}`)}
                     className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-mono font-semibold rounded-xl border border-slate-700 shrink-0"
                   >
@@ -544,8 +651,30 @@ echo "✅ Termux Boot Auto-Start Service Configured!"`
                 </div>
               </div>
             ) : (
-              <div className="space-y-1.5">
-                <label className="text-xs font-mono text-slate-300">Rclone Remote Google Drive Target</label>
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-mono text-slate-300">Rclone Remote Google Drive Target</label>
+                  <div className="flex items-center space-x-2">
+                    <button
+                      type="button"
+                      onClick={() => initiateGoogleDriveOAuth()}
+                      className="px-2.5 py-1 bg-cyan-950 border border-cyan-800 text-cyan-300 hover:bg-cyan-900 rounded-lg text-xs font-semibold font-mono flex items-center space-x-1"
+                    >
+                      <LogIn className="w-3.5 h-3.5" />
+                      <span>Direct Sign-In</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={loadUserDriveFolders}
+                      disabled={loadingDriveFolders}
+                      className="px-2.5 py-1 bg-slate-800 border border-slate-700 text-slate-200 hover:bg-slate-700 rounded-lg text-xs font-semibold font-mono flex items-center space-x-1"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 ${loadingDriveFolders ? 'animate-spin' : ''}`} />
+                      <span>Fetch Folders</span>
+                    </button>
+                  </div>
+                </div>
+
                 <input
                   type="text"
                   value={gdriveFolder}
@@ -553,6 +682,33 @@ echo "✅ Termux Boot Auto-Start Service Configured!"`
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-xs font-mono text-indigo-300 focus:outline-none focus:border-indigo-500"
                   placeholder="gdrive:TermuxSync/Backups"
                 />
+
+                {driveFolderNotice && (
+                  <p className="text-[11px] font-mono text-emerald-400 bg-emerald-950/40 p-2 rounded-lg border border-emerald-900/60">
+                    {driveFolderNotice}
+                  </p>
+                )}
+
+                {driveFolders.length > 0 && (
+                  <div className="space-y-1">
+                    <span className="text-[11px] font-mono text-slate-400">Select From Your Google Drive Folders:</span>
+                    <select
+                      onChange={(e) => {
+                        if (e.target.value) {
+                          setGdriveFolder(`gdrive:${e.target.value}`);
+                        }
+                      }}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs font-mono text-slate-200 focus:outline-none focus:border-indigo-500"
+                    >
+                      <option value="">-- Choose a Drive Folder --</option>
+                      {driveFolders.map((f) => (
+                        <option key={f.id} value={f.name}>
+                          📁 {f.name} (ID: {f.id.substring(0, 8)}...)
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
               </div>
             )}
 

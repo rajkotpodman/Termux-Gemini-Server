@@ -108,6 +108,18 @@ function MainAppContent() {
     checkHealth();
     fetchAuthUser();
 
+    // Check if URL has share parameter or tab selection (for direct share URLs)
+    const urlParams = new URLSearchParams(window.location.search);
+    const shareParam = urlParams.get('share');
+    const tabParam = urlParams.get('tab');
+    const isSharePath = window.location.pathname.startsWith('/share/');
+
+    if (shareParam || isSharePath) {
+      setActiveTab('sync');
+    } else if (tabParam && ['sync', 'folder', 'code', 'guide', 'tester', 'clients', 'drive', 'apk'].includes(tabParam)) {
+      setActiveTab(tabParam as any);
+    }
+
     // Check if user just returned from a full-page Google Auth redirect
     checkFirebaseRedirectResult().then((res) => {
       if (res?.user) {

@@ -788,8 +788,9 @@ async function startServer() {
       syncEngineState.isActive = active;
       if (active) {
         const randomHash = Math.random().toString(36).substring(2, 12);
-        const randomSub = 'sync-vault-' + Math.random().toString(36).substring(2, 8);
-        syncEngineState.tunnelUrl = `https://${randomSub}.trycloudflare.com/share/${randomHash}`;
+        const host = req.get('host') || 'localhost:3000';
+        const protocol = req.protocol || 'http';
+        syncEngineState.tunnelUrl = `${protocol}://${host}/?share=${randomHash}`;
         if (folder) syncEngineState.folderPath = folder;
       } else {
         syncEngineState.tunnelUrl = '';
