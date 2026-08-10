@@ -363,6 +363,10 @@ async function startServer() {
       const driveRes = await fetch(driveUrl, {
         headers: { Authorization: `Bearer ${token}` },
       });
+      const contentType = driveRes.headers.get('content-type') || '';
+      if (!contentType.includes('application/json')) {
+        return res.status(401).json({ error: 'Unauthorized', message: 'Google Drive token invalid or expired. Please re-authenticate with Google.' });
+      }
       const data = await driveRes.json();
       if (!driveRes.ok) {
         if (driveRes.status === 401) {
@@ -411,6 +415,11 @@ async function startServer() {
         body: multipartRequestBody,
       });
 
+      const contentType = driveRes.headers.get('content-type') || '';
+      if (!contentType.includes('application/json')) {
+        return res.status(401).json({ error: 'Unauthorized', message: 'Google Drive token invalid or expired. Please re-authenticate with Google.' });
+      }
+
       const data = await driveRes.json();
       if (!driveRes.ok) {
         if (driveRes.status === 401) {
@@ -442,7 +451,8 @@ async function startServer() {
           currentUser = null;
           currentAccessToken = null;
         }
-        const data = await driveRes.json().catch(() => ({}));
+        const contentType = driveRes.headers.get('content-type') || '';
+        const data = contentType.includes('application/json') ? await driveRes.json().catch(() => ({})) : { message: 'Delete failed' };
         return res.status(driveRes.status).json(data);
       }
       return res.json({ status: 'success', deletedFileId: fileId });
@@ -463,6 +473,10 @@ async function startServer() {
       const driveRes = await fetch(driveUrl, {
         headers: { Authorization: `Bearer ${token}` },
       });
+      const contentType = driveRes.headers.get('content-type') || '';
+      if (!contentType.includes('application/json')) {
+        return res.status(401).json({ error: 'Unauthorized', message: 'Google Drive token invalid or expired. Please re-authenticate with Google.' });
+      }
       const data = await driveRes.json();
       if (!driveRes.ok) {
         if (driveRes.status === 401) {
@@ -496,6 +510,10 @@ async function startServer() {
           mimeType: 'application/vnd.google-apps.folder',
         }),
       });
+      const contentType = driveRes.headers.get('content-type') || '';
+      if (!contentType.includes('application/json')) {
+        return res.status(401).json({ error: 'Unauthorized', message: 'Google Drive token invalid or expired. Please re-authenticate with Google.' });
+      }
       const data = await driveRes.json();
       if (!driveRes.ok) {
         return res.status(driveRes.status).json(data);
@@ -519,6 +537,10 @@ async function startServer() {
       const driveRes = await fetch(driveUrl, {
         headers: { Authorization: `Bearer ${token}` },
       });
+      const contentType = driveRes.headers.get('content-type') || '';
+      if (!contentType.includes('application/json')) {
+        return res.status(401).json({ error: 'Unauthorized', message: 'Google Drive token invalid or expired. Please re-authenticate with Google.' });
+      }
       const data = await driveRes.json();
       if (!driveRes.ok) {
         if (driveRes.status === 401) {
@@ -555,6 +577,9 @@ async function startServer() {
       });
 
       if (!driveRes.ok) {
+        if (driveRes.status === 401 || driveRes.status === 403) {
+          return res.status(driveRes.status).json({ error: 'Unauthorized', message: 'Google Drive access token expired or invalid permissions. Please re-authenticate with Google.' });
+        }
         return res.status(driveRes.status).json({ error: 'Google Drive Download Failed', status: driveRes.status });
       }
 
@@ -600,9 +625,20 @@ async function startServer() {
         headers: { Authorization: `Bearer ${token}` },
       });
 
+      const contentType = listRes.headers.get('content-type') || '';
+      if (!contentType.includes('application/json')) {
+        return res.status(401).json({
+          error: 'Unauthorized',
+          message: 'Google Drive authentication expired or invalid. Please click "Direct Google Sign-In" to re-authenticate.',
+        });
+      }
+
       const listData = await listRes.json();
       if (!listRes.ok) {
-        return res.status(listRes.status).json(listData);
+        return res.status(listRes.status).json({
+          error: 'Drive Error',
+          message: listData.error?.message || 'Failed to access Google Drive folder.',
+        });
       }
 
       const files = listData.files || [];

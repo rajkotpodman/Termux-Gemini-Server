@@ -89,6 +89,7 @@ export const LocalFolderDeployer: React.FC<LocalFolderDeployerProps> = ({ onOpen
   const handleImportDriveFolder = async (folderId: string, folderName: string) => {
     setImportingDriveFolderId(folderId);
     setStatusMsg(`Importing files from Google Drive folder "${folderName}" to live server...`);
+    setDriveFolderError(null);
     try {
       const accessToken = getStoredDriveAccessToken();
       const headers: Record<string, string> = { 'Content-Type': 'application/json' };
@@ -102,9 +103,20 @@ export const LocalFolderDeployer: React.FC<LocalFolderDeployerProps> = ({ onOpen
         headers,
         body: JSON.stringify({ folderId }),
       });
-      const data = await res.json();
-      if (res.ok && data.status === 'success') {
-        setStatusMsg(`✅ ${data.message}`);
+
+      const contentType = res.headers.get('content-type') || '';
+      let data: any = {};
+      if (contentType.includes('application/json')) {
+        data = await res.json();
+      } else {
+        if (res.status === 401 || res.status === 403) {
+          throw new Error('Google Drive authorization required or expired. Click "Direct Google Sign-In" to re-authenticate.');
+        }
+        throw new Error(`Server returned non-JSON response (${res.status}). Please verify Google Drive sign-in.`);
+      }
+
+      if (res.ok && (data.status === 'success' || data.status === 'warning')) {
+        setStatusMsg(`✅ ${data.message || 'Folder files imported successfully!'}`);
         setIsDriveFolderModalOpen(false);
         await fetchDeployedMedia();
       } else {
