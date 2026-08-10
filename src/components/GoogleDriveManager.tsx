@@ -16,13 +16,15 @@ import {
   ShieldAlert,
   LogIn,
   FileCode,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Eye
 } from 'lucide-react';
 import { GoogleUser } from '../types';
 import { 
   fetchGoogleDriveFolders, 
   createGoogleDriveFolder, 
   fetchGoogleDriveFiles, 
+  fetchGoogleDriveFolderFiles,
   initiateGoogleDriveOAuth, 
   getStoredDriveAccessToken,
   safeParseJsonResponse,
@@ -70,7 +72,25 @@ export const GoogleDriveManager: React.FC<GoogleDriveManagerProps> = ({ user, on
   const [deleting, setDeleting] = useState(false);
   const [deleteSuccess, setDeleteSuccess] = useState<string | null>(null);
 
+  // Selected folder file browser state
+  const [selectedFolder, setSelectedFolder] = useState<{ id: string; name: string } | null>(null);
+  const [folderFiles, setFolderFiles] = useState<DriveFile[]>([]);
+  const [loadingFolderFiles, setLoadingFolderFiles] = useState(false);
   const [creatingFolder, setCreatingFolder] = useState(false);
+
+  const handleBrowseFolderFiles = async (folderId: string, folderName: string) => {
+    setSelectedFolder({ id: folderId, name: folderName });
+    setLoadingFolderFiles(true);
+    setError(null);
+    try {
+      const list = await fetchGoogleDriveFolderFiles(folderId);
+      setFolderFiles(list as DriveFile[]);
+    } catch (err: any) {
+      setError(err.message || 'Error fetching files in folder.');
+    } finally {
+      setLoadingFolderFiles(false);
+    }
+  };
 
   const handleCreateFolderInDrive = async (folderName = 'Termux_Gemini_Live') => {
     setCreatingFolder(true);
@@ -485,10 +505,11 @@ export const GoogleDriveManager: React.FC<GoogleDriveManagerProps> = ({ user, on
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {folders.map((folder) => {
               const isImportingThis = importingFolderId === folder.id;
+              const isSelected = selectedFolder?.id === folder.id;
               return (
                 <div
                   key={folder.id}
-                  className="bg-slate-950 border border-slate-800 hover:border-cyan-800/80 rounded-xl p-4 transition-all flex flex-col justify-between space-y-3 group"
+                  className={`bg-slate-950 border ${isSelected ? 'border-amber-500/80 bg-slate-900/90 ring-1 ring-amber-500/30' : 'border-slate-800 hover:border-cyan-800/80'} rounded-xl p-4 transition-all flex flex-col justify-between space-y-3 group`}
                 >
                   <div className="flex items-start space-x-3">
                     <div className="p-2 rounded-lg bg-amber-950/60 border border-amber-800/50 text-amber-400 shrink-0">
@@ -504,26 +525,106 @@ export const GoogleDriveManager: React.FC<GoogleDriveManagerProps> = ({ user, on
                     </div>
                   </div>
 
-                  <button
-                    onClick={() => handleImportFolder(folder.id, folder.name)}
-                    disabled={isImportingThis}
-                    className="w-full flex items-center justify-center space-x-1.5 px-3 py-2 bg-cyan-600 hover:bg-cyan-500 disabled:bg-slate-800 text-white font-semibold rounded-lg text-xs transition-all shadow-md"
-                  >
-                    {isImportingThis ? (
-                      <>
-                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                        <span>Deploying Folder to Server...</span>
-                      </>
-                    ) : (
-                      <>
-                        <Upload className="w-3.5 h-3.5" />
-                        <span>🚀 Host Folder Live on Net</span>
-                      </>
-                    )}
-                  </button>
+                  <div className="flex items-center gap-2 pt-1">
+                    <button
+                      onClick={() => handleBrowseFolderFiles(folder.id, folder.name)}
+                      className={`flex-1 flex items-center justify-center space-x-1.5 px-3 py-2 ${isSelected ? 'bg-amber-600 text-white font-bold' : 'bg-slate-800 hover:bg-slate-700 text-slate-200'} rounded-lg text-xs transition-all shadow-sm`}
+                      title="Fetch & view files inside this folder directly from Drive without live hosting"
+                    >
+                      <Eye className="w-3.5 h-3.5 text-amber-400" />
+                      <span>{isSelected ? 'Viewing Files' : 'Browse Files'}</span>
+                    </button>
+                    <button
+                      onClick={() => handleImportFolder(folder.id, folder.name)}
+                      disabled={isImportingThis}
+                      className="flex-1 flex items-center justify-center space-x-1.5 px-3 py-2 bg-cyan-600 hover:bg-cyan-500 disabled:bg-slate-800 text-white font-semibold rounded-lg text-xs transition-all shadow-md"
+                      title="Import and host folder contents live on server"
+                    >
+                      {isImportingThis ? (
+                        <>
+                          <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                          <span>Hosting...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Upload className="w-3.5 h-3.5" />
+                          <span>Host Live</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
                 </div>
               );
             })}
+          </div>
+        )}
+
+        {/* Selected Folder Files Panel */}
+        {selectedFolder && (
+          <div className="mt-4 p-4 bg-slate-950 border border-amber-500/30 rounded-xl space-y-3 animate-fade-in">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+              <div className="flex items-center space-x-2">
+                <Folder className="w-4 h-4 text-amber-400" />
+                <span className="text-xs font-bold text-slate-200">
+                  Files in "{selectedFolder.name}" ({folderFiles.length})
+                </span>
+                <span className="text-[10px] bg-amber-500/10 text-amber-300 border border-amber-500/20 px-2 py-0.5 rounded-full font-mono">
+                  Direct Drive View
+                </span>
+              </div>
+              <button
+                onClick={() => setSelectedFolder(null)}
+                className="text-slate-400 hover:text-white p-1"
+                title="Close Folder View"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {loadingFolderFiles ? (
+              <div className="py-6 text-center text-xs text-slate-400 font-mono flex items-center justify-center space-x-2">
+                <RefreshCw className="w-4 h-4 animate-spin text-amber-400" />
+                <span>Fetching folder contents from Google Drive...</span>
+              </div>
+            ) : folderFiles.length === 0 ? (
+              <div className="py-4 text-center text-xs text-slate-500">
+                No files found inside folder "{selectedFolder.name}".
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-60 overflow-y-auto pr-1">
+                {folderFiles.map((f) => (
+                  <div key={f.id} className="p-2.5 bg-slate-900 border border-slate-800 rounded-lg flex items-center justify-between hover:border-slate-700 transition-colors">
+                    <div className="flex items-center space-x-2.5 min-w-0 pr-2">
+                      {getFileIcon(f.mimeType)}
+                      <div className="min-w-0">
+                        <div className="text-xs font-medium text-slate-200 truncate">{f.name}</div>
+                        <div className="text-[10px] text-slate-500 font-mono">{formatSize(f.size)}</div>
+                      </div>
+                    </div>
+                    <div className="flex items-center space-x-1 shrink-0">
+                      <button
+                        onClick={() => handleImportFile(f.id, f.name)}
+                        className="px-2 py-1 bg-cyan-600 hover:bg-cyan-500 text-white rounded text-[10px] font-semibold transition-colors"
+                        title="Deploy this file live"
+                      >
+                        Host Live
+                      </button>
+                      {f.webViewLink && (
+                        <a
+                          href={f.webViewLink}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="p-1 text-slate-400 hover:text-emerald-400 transition-colors"
+                          title="Open in Google Drive"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5" />
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>

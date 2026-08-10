@@ -361,3 +361,52 @@ export async function fetchGoogleDriveFiles(queryStr = '', token?: string | null
   return [];
 }
 
+/**
+ * List files inside a specific Google Drive folder ID directly (without live hosting requirement)
+ */
+export async function fetchGoogleDriveFolderFiles(folderId: string, token?: string | null): Promise<DriveFile[]> {
+  const accessToken = token || getStoredDriveAccessToken();
+  if (!folderId) return [];
+
+  // Attempt 1: Express backend proxy
+  try {
+    const headers: Record<string, string> = { 'Accept': 'application/json' };
+    if (accessToken) {
+      headers['Authorization'] = `Bearer ${accessToken}`;
+      headers['x-google-access-token'] = accessToken;
+    }
+    const q = `'${folderId.replace(/'/g, "\\'")}' in parents and trashed = false`;
+    const res = await fetch(`/api/drive/files?q=${encodeURIComponent(q)}`, { headers });
+    if (res.ok) {
+      const data = await safeParseJsonResponse(res);
+      if (data && data.files && Array.isArray(data.files)) {
+        return data.files;
+      }
+    }
+  } catch (e) {
+    console.warn('[GDrive] Server endpoint for folder files failed, using direct REST API', e);
+  }
+
+  // Attempt 2: Direct Google Drive REST API
+  if (accessToken) {
+    try {
+      const q = `'${folderId.replace(/'/g, "\\'")}' in parents and trashed = false`;
+      const driveUrl = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name,mimeType,size,createdTime,modifiedTime,webViewLink,iconLink,thumbnailLink)&pageSize=100&orderBy=name`;
+      const directRes = await fetch(driveUrl, {
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Accept': 'application/json',
+        },
+      });
+      if (directRes.ok) {
+        const directData = await safeParseJsonResponse(directRes);
+        if (directData) return directData.files || [];
+      }
+    } catch (e) {
+      console.warn('[GDrive] Direct REST API list folder contents error:', e);
+    }
+  }
+
+  return [];
+}
+

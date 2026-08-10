@@ -5,8 +5,10 @@ import { useTranslation } from '../lib/i18n';
 import { 
   fetchGoogleDriveFolders, 
   createGoogleDriveFolder, 
+  fetchGoogleDriveFolderFiles,
   getStoredDriveAccessToken, 
-  initiateGoogleDriveOAuth 
+  initiateGoogleDriveOAuth,
+  validateGoogleApiResponse
 } from '../lib/gdrive';
 
 interface MediaFile {
@@ -107,23 +109,19 @@ export const LocalFolderDeployer: React.FC<LocalFolderDeployerProps> = ({ onOpen
         body: JSON.stringify({ folderId }),
       });
 
-      const contentType = res.headers.get('content-type') || '';
-      let data: any = {};
-      if (contentType.includes('application/json')) {
-        data = await res.json();
-      } else {
-        if (res.status === 401 || res.status === 403) {
-          throw new Error('Google Drive authorization required or expired. Click "Direct Google Sign-In" to re-authenticate.');
-        }
-        throw new Error(`Server returned non-JSON response (${res.status}). Please verify Google Drive sign-in.`);
+      const validated = await validateGoogleApiResponse(res, 'LocalFolderDeployer.importFolder');
+      if (!validated.isValid) {
+        setDriveFolderError(validated.errorNotice || 'Server error deploying folder, check console.');
+        return;
       }
 
-      if (res.ok && (data.status === 'success' || data.status === 'warning')) {
+      const data = validated.data;
+      if (data && (data.status === 'success' || data.status === 'warning')) {
         setStatusMsg(`✅ ${data.message || 'Folder files imported successfully!'}`);
         setIsDriveFolderModalOpen(false);
         await fetchDeployedMedia();
       } else {
-        setDriveFolderError(data.message || data.error || 'Failed to import Google Drive folder.');
+        setDriveFolderError(data?.message || data?.error || 'Failed to import Google Drive folder.');
       }
     } catch (err: any) {
       setDriveFolderError(err.message || 'Error deploying Google Drive folder.');
