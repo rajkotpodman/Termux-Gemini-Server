@@ -35,7 +35,14 @@ import { HelpDialog } from './components/HelpDialog';
 import { ApkBuildCenter } from './components/ApkBuildCenter';
 import { LanguageProvider, useTranslation } from './lib/i18n';
 import { HealthStatus, GoogleUser } from './types';
-import { signInWithFirebaseGoogle, logoutFirebase, onAuthStateChanged, auth } from './lib/firebase';
+import { 
+  signInWithFirebaseGoogle, 
+  signInWithFirebaseRedirectMode,
+  checkFirebaseRedirectResult,
+  logoutFirebase, 
+  onAuthStateChanged, 
+  auth 
+} from './lib/firebase';
 
 function MainAppContent() {
   const { t } = useTranslation();
@@ -47,6 +54,11 @@ function MainAppContent() {
   const [isHelpOpen, setIsHelpOpen] = useState(false);
   const [isServerOnline, setIsServerOnline] = useState(true);
   const [qrTarget, setQrTarget] = useState<{ url: string; title: string } | null>(null);
+  const [authErrorModal, setAuthErrorModal] = useState<{
+    code?: string;
+    message?: string;
+    domain?: string;
+  } | null>(null);
 
   const checkHealth = async () => {
     setHealthLoading(true);
@@ -95,6 +107,22 @@ function MainAppContent() {
     checkHealth();
     fetchAuthUser();
 
+    // Check if user just returned from a full-page Google Auth redirect
+    checkFirebaseRedirectResult().then((res) => {
+      if (res?.user) {
+        const userPayload: GoogleUser = {
+          id: res.user.id,
+          email: res.user.email || '',
+          name: res.user.name || '',
+          picture: res.user.picture || '',
+        };
+        setUser(userPayload);
+        localStorage.setItem('google_user', JSON.stringify(userPayload));
+      }
+    }).catch((err) => {
+      console.warn('Redirect check notice:', err);
+    });
+
     // Listen to Firebase auth state changes for automatic session restoration
     const unsubscribeFirebase = onAuthStateChanged(auth, async (fbUser) => {
       if (fbUser) {
@@ -125,6 +153,7 @@ function MainAppContent() {
 
   const handleGoogleLogin = async () => {
     setAuthLoading(true);
+    setAuthErrorModal(null);
     try {
       // Primary Method: Firebase Popup Sign-In with Google Drive Scopes
       const result = await signInWithFirebaseGoogle();
@@ -139,29 +168,29 @@ function MainAppContent() {
         localStorage.setItem('google_user', JSON.stringify(userPayload));
       }
     } catch (firebaseErr: any) {
-      const code = firebaseErr?.code;
-      if (
-        code === 'auth/popup-closed-by-user' ||
-        code === 'auth/cancelled-popup-request' ||
-        code === 'auth/popup-blocked'
-      ) {
-        console.info('Google login popup was closed or blocked.');
-        setAuthLoading(false);
-        return;
-      }
+      const code = firebaseErr?.code || 'auth/popup-failed';
+      const message = firebaseErr?.message || 'Google sign-in popup closed or restricted.';
+      const domain = window.location.hostname;
 
-      // Secondary Fallback: Standard OAuth backend popup URL
+      console.warn('Google Sign-In notice:', code, message);
+
+      // Try secondary backend URL if available
       try {
         const res = await fetch('/api/auth/google/url');
         const data = await res.json();
         if (data.authUrl) {
           window.open(data.authUrl, 'GoogleLogin', 'width=550,height=650');
-        } else {
-          console.warn('Firebase Auth notice:', firebaseErr?.message);
+          setAuthLoading(false);
+          return;
         }
-      } catch (fallbackErr) {
-        console.warn('Google Sign-In notice:', firebaseErr?.message);
-      }
+      } catch {}
+
+      // If popup was blocked/closed or domain is unauthorized, open helpful modal
+      setAuthErrorModal({
+        code,
+        message,
+        domain
+      });
     } finally {
       setAuthLoading(false);
     }
@@ -423,6 +452,67 @@ function MainAppContent() {
 
       {/* Help Modal */}
       <HelpDialog isOpen={isHelpOpen} onClose={() => setIsHelpOpen(false)} />
+
+      {/* Google Auth Assistance Modal */}
+      {authErrorModal && (
+        <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-50 flex items-center justify-center p-4 animate-fade-in">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 space-y-5 shadow-2xl relative text-left">
+            <button
+              onClick={() => setAuthErrorModal(null)}
+              className="absolute top-4 right-4 p-1.5 text-slate-400 hover:text-white rounded-lg bg-slate-800"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            <div className="flex items-center space-x-3">
+              <div className="p-3 bg-amber-500/10 border border-amber-500/20 text-amber-400 rounded-2xl">
+                <AlertCircle className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-white">Google Sign-In Popup Issue</h3>
+                <p className="text-xs text-slate-400 font-mono mt-0.5">
+                  Code: {authErrorModal.code || 'popup_closed'}
+                </p>
+              </div>
+            </div>
+
+            <div className="p-3.5 bg-slate-950 rounded-xl border border-slate-800 text-xs text-slate-300 leading-relaxed space-y-2">
+              <p className="font-semibold text-amber-300">Why did the popup close immediately?</p>
+              <ul className="list-disc list-inside space-y-1 text-slate-400 text-[11px]">
+                <li><strong className="text-slate-200">Browser Popup Restrictions:</strong> Embedded previews and mobile browsers block popups or cross-origin cookies.</li>
+                <li><strong className="text-slate-200">Firebase Authorized Domain:</strong> If hosted on <code className="text-emerald-400">{authErrorModal.domain}</code>, add this domain in Firebase Console &rarr; Auth &rarr; Settings &rarr; Authorized Domains.</li>
+              </ul>
+            </div>
+
+            <div className="space-y-2 pt-1">
+              <button
+                onClick={async () => {
+                  setAuthErrorModal(null);
+                  try {
+                    await signInWithFirebaseRedirectMode();
+                  } catch (err: any) {
+                    alert('Redirect failed: ' + (err?.message || err));
+                  }
+                }}
+                className="w-full py-3 px-4 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-semibold text-xs transition-all shadow-md flex items-center justify-center space-x-2"
+              >
+                <LogIn className="w-4 h-4" />
+                <span>⚡ Try Full-Page Redirect Sign-In (Bypasses Popups)</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  window.open(window.location.href, '_blank');
+                }}
+                className="w-full py-2.5 px-4 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-xl font-medium text-xs transition-all flex items-center justify-center space-x-2"
+              >
+                <Globe className="w-4 h-4 text-slate-400" />
+                <span>Open Site in Standalone Tab</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* QR Code Sharing Modal */}
       {qrTarget && (

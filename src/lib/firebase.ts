@@ -3,6 +3,8 @@ import {
   getAuth, 
   GoogleAuthProvider, 
   signInWithPopup, 
+  signInWithRedirect,
+  getRedirectResult,
   signOut as firebaseSignOut, 
   onAuthStateChanged,
   User
@@ -40,7 +42,40 @@ export interface FirebaseLoginResult {
 }
 
 /**
- * Trigger Firebase Google Sign-In with Google Drive access token
+ * Handle redirect result on initial page load
+ */
+export async function checkFirebaseRedirectResult(): Promise<FirebaseLoginResult | null> {
+  try {
+    const result = await getRedirectResult(auth);
+    if (!result) return null;
+
+    const credential = GoogleAuthProvider.credentialFromResult(result);
+    const accessToken = credential?.accessToken || null;
+    const firebaseUser = result.user;
+    const userPayload = {
+      id: firebaseUser.uid,
+      email: firebaseUser.email,
+      name: firebaseUser.displayName,
+      picture: firebaseUser.photoURL,
+    };
+
+    if (accessToken) {
+      await fetch('/api/auth/firebase-sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user: userPayload, accessToken }),
+      }).catch(err => console.warn('Failed to sync Firebase redirect session:', err));
+    }
+
+    return { user: userPayload, accessToken };
+  } catch (err: any) {
+    console.warn('Firebase redirect sign-in error:', err);
+    throw err;
+  }
+}
+
+/**
+ * Trigger Firebase Google Sign-In with Google Drive access token via Popup
  */
 export async function signInWithFirebaseGoogle(): Promise<FirebaseLoginResult> {
   try {
@@ -70,17 +105,16 @@ export async function signInWithFirebaseGoogle(): Promise<FirebaseLoginResult> {
       accessToken,
     };
   } catch (err: any) {
-    if (
-      err?.code === 'auth/popup-closed-by-user' ||
-      err?.code === 'auth/cancelled-popup-request' ||
-      err?.code === 'auth/popup-blocked'
-    ) {
-      console.info('Firebase Google Sign-In popup closed or cancelled by user.');
-    } else {
-      console.warn('Firebase Google Sign-In notice:', err?.message || err);
-    }
+    console.warn('Firebase Google Sign-In notice:', err?.code, err?.message || err);
     throw err;
   }
+}
+
+/**
+ * Trigger Firebase Google Sign-In via Full Page Redirect (Bypasses popup restrictions)
+ */
+export async function signInWithFirebaseRedirectMode(): Promise<void> {
+  await signInWithRedirect(auth, googleProvider);
 }
 
 /**
@@ -93,3 +127,4 @@ export async function logoutFirebase(): Promise<void> {
 
 export { onAuthStateChanged };
 export type { User };
+

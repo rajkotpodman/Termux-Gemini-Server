@@ -10,7 +10,6 @@
 ---
 
 ## 🌟 Overview
-https://rajkotpodman.github.io/Termux-Gemini-Server/
 
 **Termux Gemini Server** turns any Android device (via Termux), Linux PC, macOS, or Windows host into a lightweight, persistent **24/7 background micro-server**, continuous **folder synchronization manager** (based on Syncthing / Rclone principles), and personal cloud media stream server powered by **Gemini 2.5 AI**.
 

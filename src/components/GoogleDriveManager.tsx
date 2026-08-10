@@ -273,7 +273,18 @@ export const GoogleDriveManager: React.FC<GoogleDriveManagerProps> = ({ user, on
             className="inline-flex items-center space-x-2 px-6 py-3 bg-white hover:bg-slate-100 text-slate-900 font-semibold rounded-xl text-sm transition-all shadow-md"
           >
             <LogIn className="w-4 h-4 text-slate-900" />
-            <span>Sign in with Google</span>
+            <span>Sign in with Google (Popup)</span>
+          </button>
+          <button
+            onClick={async () => {
+              const { signInWithFirebaseRedirectMode } = await import('../lib/firebase');
+              await signInWithFirebaseRedirectMode();
+            }}
+            className="inline-flex items-center space-x-2 px-5 py-3 bg-emerald-700 hover:bg-emerald-600 text-white font-semibold rounded-xl text-sm transition-all shadow-md"
+            title="Sign in using full-page redirect (bypasses popup blockers)"
+          >
+            <LogIn className="w-4 h-4" />
+            <span>Sign in with Redirect (Full Page)</span>
           </button>
           <button
             onClick={() => window.open(window.location.href, '_blank')}
