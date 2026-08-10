@@ -10,6 +10,9 @@ import {
   initiateGoogleDriveOAuth,
   validateGoogleApiResponse
 } from '../lib/gdrive';
+import { saveDriveFolderToFirestore } from '../lib/firebase';
+
+import { GoogleUser } from '../types';
 
 interface MediaFile {
   filename: string;
@@ -23,9 +26,10 @@ interface MediaFile {
 
 interface LocalFolderDeployerProps {
   onOpenHelp?: () => void;
+  user?: GoogleUser | null;
 }
 
-export const LocalFolderDeployer: React.FC<LocalFolderDeployerProps> = ({ onOpenHelp }) => {
+export const LocalFolderDeployer: React.FC<LocalFolderDeployerProps> = ({ onOpenHelp, user }) => {
   const { t } = useTranslation();
   const [files, setFiles] = useState<MediaFile[]>([]);
   const [loading, setLoading] = useState(false);
@@ -120,6 +124,16 @@ export const LocalFolderDeployer: React.FC<LocalFolderDeployerProps> = ({ onOpen
         setStatusMsg(`✅ ${data.message || 'Folder files imported successfully!'}`);
         setIsDriveFolderModalOpen(false);
         await fetchDeployedMedia();
+
+        if (user?.id) {
+          saveDriveFolderToFirestore({
+            folderId,
+            folderName: folderName || 'Google Drive Folder',
+            userId: user.id,
+            fileCount: data.importedCount || 0,
+            status: 'deployed'
+          }).catch(e => console.warn('Firestore folder sync warning:', e));
+        }
       } else {
         setDriveFolderError(data?.message || data?.error || 'Failed to import Google Drive folder.');
       }

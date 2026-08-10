@@ -9,7 +9,16 @@ import {
   onAuthStateChanged,
   User
 } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
+import { 
+  getFirestore, 
+  doc, 
+  getDocFromServer, 
+  setDoc, 
+  getDocs, 
+  collection, 
+  query, 
+  where 
+} from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
 
 // Initialize Firebase
@@ -20,6 +29,51 @@ export const auth = getAuth(app);
 export const db = firebaseConfig.firestoreDatabaseId
   ? getFirestore(app, firebaseConfig.firestoreDatabaseId)
   : getFirestore(app);
+
+// Test connection on boot per Firebase guidelines
+async function testConnection() {
+  try {
+    await getDocFromServer(doc(db, 'test', 'connection'));
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('the client is offline')) {
+      console.error("Please check your Firebase configuration.");
+    }
+  }
+}
+testConnection();
+
+export enum OperationType {
+  CREATE = 'create',
+  UPDATE = 'update',
+  DELETE = 'delete',
+  LIST = 'list',
+  GET = 'get',
+  WRITE = 'write',
+}
+
+export interface FirestoreErrorInfo {
+  error: string;
+  operationType: OperationType;
+  path: string | null;
+  authInfo: {
+    userId?: string | null;
+    email?: string | null;
+  };
+}
+
+export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+  const errInfo: FirestoreErrorInfo = {
+    error: error instanceof Error ? error.message : String(error),
+    authInfo: {
+      userId: auth.currentUser?.uid,
+      email: auth.currentUser?.email,
+    },
+    operationType,
+    path
+  };
+  console.error('Firestore Error:', JSON.stringify(errInfo));
+  throw new Error(JSON.stringify(errInfo));
+}
 
 // Configure Google Auth Provider with Google Drive scopes
 export const googleProvider = new GoogleAuthProvider();
@@ -198,6 +252,58 @@ export async function signInWithFirebaseRedirectMode(): Promise<void> {
 export async function logoutFirebase(): Promise<void> {
   await firebaseSignOut(auth);
   await fetch('/api/auth/logout', { method: 'POST' }).catch(() => {});
+}
+
+// Firestore Persistence Helpers
+export async function saveDriveFolderToFirestore(folder: { folderId: string; folderName: string; userId: string; fileCount?: number; status?: string }) {
+  try {
+    const docRef = doc(db, 'drive_folders', `${folder.userId}_${folder.folderId}`);
+    await setDoc(docRef, {
+      ...folder,
+      status: folder.status || 'active',
+      fileCount: folder.fileCount || 0,
+      updatedAt: new Date().toISOString(),
+      createdAt: new Date().toISOString(),
+    }, { merge: true });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, `drive_folders/${folder.folderId}`);
+  }
+}
+
+export async function getSavedDriveFoldersFromFirestore(userId: string) {
+  try {
+    const q = query(collection(db, 'drive_folders'), where('userId', '==', userId));
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(doc => doc.data());
+  } catch (error) {
+    handleFirestoreError(error, OperationType.LIST, 'drive_folders');
+    return [];
+  }
+}
+
+export async function saveMediaDeploymentToFirestore(deployment: { fileId?: string; fileName: string; liveUrl?: string; sizeMb?: string; mimeType?: string; source?: string; userId: string; status?: string }) {
+  try {
+    const docId = `${deployment.userId}_${Date.now()}`;
+    const docRef = doc(db, 'media_deployments', docId);
+    await setDoc(docRef, {
+      ...deployment,
+      status: deployment.status || 'live',
+      createdAt: new Date().toISOString(),
+    }, { merge: true });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, 'media_deployments');
+  }
+}
+
+export async function getSavedMediaDeploymentsFromFirestore(userId: string) {
+  try {
+    const q = query(collection(db, 'media_deployments'), where('userId', '==', userId));
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.LIST, 'media_deployments');
+    return [];
+  }
 }
 
 export { onAuthStateChanged };

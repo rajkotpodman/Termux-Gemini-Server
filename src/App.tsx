@@ -430,7 +430,7 @@ function MainAppContent() {
         {/* Tab Content Panels */}
         <div className="pb-6">
           {activeTab === 'sync' && <SyncthingRcloneManager />}
-          {activeTab === 'folder' && <LocalFolderDeployer onOpenHelp={() => setIsHelpOpen(true)} />}
+          {activeTab === 'folder' && <LocalFolderDeployer user={user} onOpenHelp={() => setIsHelpOpen(true)} />}
           {activeTab === 'code' && <CodeViewer />}
           {activeTab === 'guide' && <TermuxGuide />}
           {activeTab === 'tester' && <ApiPlayground />}

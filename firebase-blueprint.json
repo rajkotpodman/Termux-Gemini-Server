@@ -1,0 +1,80 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Profile",
+      "description": "User account information and auth sync",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string", "description": "User email address" },
+        "name": { "type": "string", "description": "Display name" },
+        "picture": { "type": "string", "description": "Profile avatar URL" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Account creation ISO timestamp" }
+      },
+      "required": ["email"]
+    },
+    "DriveFolder": {
+      "title": "Google Drive Folder",
+      "description": "Synced or hosted Google Drive folder metadata",
+      "type": "object",
+      "properties": {
+        "folderId": { "type": "string", "description": "Google Drive Folder ID" },
+        "folderName": { "type": "string", "description": "Name of the Drive folder" },
+        "userId": { "type": "string", "description": "Owner user UID" },
+        "fileCount": { "type": "number", "description": "Number of files in folder" },
+        "status": { "type": "string", "description": "Deployment status (active/idle/syncing)" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["folderId", "folderName", "userId"]
+    },
+    "MediaDeployment": {
+      "title": "Media Deployment",
+      "description": "Hosted live file or media deployment record",
+      "type": "object",
+      "properties": {
+        "fileId": { "type": "string", "description": "Source Google Drive File ID or local ID" },
+        "fileName": { "type": "string", "description": "File name" },
+        "liveUrl": { "type": "string", "description": "Live streaming or public host URL" },
+        "sizeMb": { "type": "string", "description": "File size in MB" },
+        "mimeType": { "type": "string", "description": "MIME type" },
+        "source": { "type": "string", "description": "gdrive, local, or sync" },
+        "userId": { "type": "string", "description": "Owner user UID" },
+        "status": { "type": "string", "description": "Deployment status" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["fileName", "userId"]
+    },
+    "SyncNode": {
+      "title": "Sync Node",
+      "description": "Syncthing / Rclone sync engine nodes",
+      "type": "object",
+      "properties": {
+        "p2pDeviceId": { "type": "string", "description": "Device or node ID" },
+        "folderPath": { "type": "string", "description": "Local or cloud directory path" },
+        "syncMode": { "type": "string", "description": "Sync direction (twoway, push, pull)" },
+        "tunnelUrl": { "type": "string", "description": "Cloudflare or P2P tunnel URL" },
+        "userId": { "type": "string", "description": "Owner user UID" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["p2pDeviceId", "userId"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles collection"
+    },
+    "/drive_folders/{folderDocId}": {
+      "schema": "DriveFolder",
+      "description": "User synced or hosted Google Drive folders"
+    },
+    "/media_deployments/{deploymentId}": {
+      "schema": "MediaDeployment",
+      "description": "Hosted live files and streaming media deployments"
+    },
+    "/sync_nodes/{nodeId}": {
+      "schema": "SyncNode",
+      "description": "Syncthing / Rclone sync engine nodes"
+    }
+  }
+}

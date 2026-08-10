@@ -30,6 +30,10 @@ import {
   safeParseJsonResponse,
   validateGoogleApiResponse
 } from '../lib/gdrive';
+import { 
+  saveDriveFolderToFirestore, 
+  saveMediaDeploymentToFirestore 
+} from '../lib/firebase';
 
 interface GoogleDriveManagerProps {
   user: GoogleUser | null;
@@ -178,6 +182,17 @@ export const GoogleDriveManager: React.FC<GoogleDriveManagerProps> = ({ user, on
       if (data && (data.status === 'success' || data.status === 'warning')) {
         setDeploySuccess(`🚀 ${data.message}`);
         setTimeout(() => setDeploySuccess(null), 6000);
+
+        // Sync with Firebase Firestore
+        if (user?.id) {
+          saveDriveFolderToFirestore({
+            folderId,
+            folderName,
+            userId: user.id,
+            fileCount: data.importedCount || 0,
+            status: 'deployed',
+          }).catch(e => console.warn('Firestore folder sync warning:', e));
+        }
       } else {
         setError(data?.message || data?.error || 'Failed to deploy folder from Google Drive');
       }
@@ -219,6 +234,19 @@ export const GoogleDriveManager: React.FC<GoogleDriveManagerProps> = ({ user, on
       if (data && data.status === 'success') {
         setDeploySuccess(`⚡ Successfully deployed "${data.filename}" live! Stream link: ${data.liveUrl}`);
         setTimeout(() => setDeploySuccess(null), 6000);
+
+        // Sync media deployment with Firebase Firestore
+        if (user?.id) {
+          saveMediaDeploymentToFirestore({
+            fileId,
+            fileName: data.filename || fileName,
+            liveUrl: data.liveUrl,
+            sizeMb: data.sizeMb,
+            source: 'gdrive',
+            userId: user.id,
+            status: 'live'
+          }).catch(e => console.warn('Firestore media sync warning:', e));
+        }
       } else {
         setError(data?.message || data?.error || 'Failed to deploy file');
       }
