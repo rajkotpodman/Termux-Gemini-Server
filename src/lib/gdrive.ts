@@ -122,7 +122,7 @@ export async function validateGoogleApiResponse<T = any>(
     if (status === 401 || status === 403) {
       notice = 'Google Drive authentication required or expired. Please sign in with Google.';
     } else if (status === 405) {
-      notice = 'Method not allowed (HTTP 405). Please verify Google Drive sign-in or endpoint.';
+      notice = 'Server endpoint unavailable on static host. Falling back to direct Google Drive connection.';
     } else if (status >= 500) {
       notice = `Server error (${status}). Check console for details.`;
     }
