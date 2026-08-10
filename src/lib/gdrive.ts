@@ -498,14 +498,19 @@ export async function importGoogleDriveFolder(
     };
   }
 
-  // Format files as live deployment objects
+  // Format files as live deployment objects with multi-protocol URLs
+  const origin = typeof window !== 'undefined' ? window.location.origin : '';
   const mappedFiles = files.map((f: any) => ({
     id: f.id,
     name: f.name,
     mimeType: f.mimeType,
     sizeMb: f.size ? (parseInt(f.size, 10) / (1024 * 1024)).toFixed(2) : '0.00',
-    liveUrl: f.webViewLink || `https://drive.google.com/file/d/${f.id}/view`,
-    streamUrl: f.webContentLink || `https://drive.google.com/uc?id=${f.id}&export=download`,
+    liveUrl: `${origin}/api/drive/stream/${f.id}?access_token=${accessToken}`,
+    streamUrl: `https://www.googleapis.com/drive/v3/files/${f.id}?alt=media&access_token=${accessToken}`,
+    previewUrl: `https://drive.google.com/file/d/${f.id}/preview`,
+    downloadUrl: `https://drive.google.com/uc?id=${f.id}&export=download`,
+    lh3Url: `https://lh3.googleusercontent.com/d/${f.id}`,
+    proxyUrl: `${origin}/api/drive/stream/${f.id}?access_token=${accessToken}`,
   }));
 
   return {
@@ -523,7 +528,17 @@ export async function importGoogleDriveFile(
   fileId: string,
   fileName?: string,
   token?: string | null
-): Promise<{ status: string; filename: string; sizeMb: string; liveUrl: string; message: string }> {
+): Promise<{
+  status: string;
+  filename: string;
+  sizeMb: string;
+  liveUrl: string;
+  streamUrl?: string;
+  previewUrl?: string;
+  downloadUrl?: string;
+  lh3Url?: string;
+  message: string;
+}> {
   const accessToken = token || getStoredDriveAccessToken();
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -578,13 +593,18 @@ export async function importGoogleDriveFile(
   const fileData = await safeParseJsonResponse(driveRes);
   const name = fileData?.name || fileName || `drive_file_${fileId}`;
   const sizeMb = fileData?.size ? (parseInt(fileData.size, 10) / (1024 * 1024)).toFixed(2) : '1.00';
-  const liveUrl = fileData?.webViewLink || fileData?.webContentLink || `https://drive.google.com/file/d/${fileId}/view`;
+  const origin = typeof window !== 'undefined' ? window.location.origin : '';
+  const liveUrl = `${origin}/api/drive/stream/${fileId}?access_token=${accessToken}`;
 
   return {
     status: 'success',
     filename: name,
     sizeMb,
     liveUrl,
+    streamUrl: `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&access_token=${accessToken}`,
+    previewUrl: `https://drive.google.com/file/d/${fileId}/preview`,
+    downloadUrl: `https://drive.google.com/uc?id=${fileId}&export=download`,
+    lh3Url: `https://lh3.googleusercontent.com/d/${fileId}`,
     message: `Successfully deployed Google Drive file "${name}" live!`,
   };
 }

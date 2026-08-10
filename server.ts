@@ -710,6 +710,60 @@ async function startServer() {
     }
   });
 
+  // Google Drive: Direct Streaming Proxy with HTTP 206 Range Request support
+  app.get('/api/drive/stream/:fileId', async (req, res) => {
+    const { fileId } = req.params;
+    const token = getEffectiveAccessToken(req) || (req.query.access_token as string);
+
+    if (!token) {
+      return res.status(401).json({ error: 'Unauthorized', message: 'Access token required for Google Drive streaming proxy.' });
+    }
+
+    try {
+      const headers: Record<string, string> = {
+        Authorization: `Bearer ${token}`,
+      };
+      if (req.headers.range) {
+        headers['Range'] = req.headers.range;
+      }
+
+      const driveRes = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, {
+        headers,
+      });
+
+      if (!driveRes.ok) {
+        return res.status(driveRes.status).send(`Google Drive API error: ${driveRes.statusText}`);
+      }
+
+      res.status(driveRes.status);
+      const forwardHeaders = ['content-type', 'content-length', 'content-range', 'accept-ranges'];
+      forwardHeaders.forEach((h) => {
+        const val = driveRes.headers.get(h);
+        if (val) res.setHeader(h, val);
+      });
+      res.setHeader('Access-Control-Allow-Origin', '*');
+
+      if (driveRes.body) {
+        const reader = driveRes.body.getReader();
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          if (!res.writableEnded) {
+            res.write(Buffer.from(value));
+          }
+        }
+        res.end();
+      } else {
+        res.end();
+      }
+    } catch (err: any) {
+      console.error('[Drive Stream Proxy Error]:', err);
+      if (!res.headersSent) {
+        res.status(500).json({ error: 'Failed to stream Google Drive file', message: err.message });
+      }
+    }
+  });
+
   // 24/7 Syncthing / Rclone Folder Synchronization API Endpoints
   let syncEngineState = {
     isActive: true,

@@ -43,6 +43,7 @@ export const LocalFolderDeployer: React.FC<LocalFolderDeployerProps> = ({ onOpen
   const [qrTarget, setQrTarget] = useState<{ url: string; title: string } | null>(null);
   const [qrCopied, setQrCopied] = useState(false);
   const [playerCopied, setPlayerCopied] = useState(false);
+  const [playerIframeMode, setPlayerIframeMode] = useState(false);
 
   // Advanced Fetcher Filters & Remote Link States
   const [searchQuery, setSearchQuery] = useState('');
@@ -705,17 +706,57 @@ export const LocalFolderDeployer: React.FC<LocalFolderDeployerProps> = ({ onOpen
 
             {selectedVideo ? (
               <div className="space-y-3">
+                <div className="flex items-center justify-between text-xs bg-slate-950 p-1.5 rounded-lg border border-slate-800 font-mono">
+                  <span className="text-slate-400 pl-1">Player Mode:</span>
+                  <div className="flex items-center space-x-1">
+                    <button
+                      type="button"
+                      onClick={() => setPlayerIframeMode(false)}
+                      className={`px-2 py-0.5 rounded text-[11px] font-semibold transition-all ${
+                        !playerIframeMode
+                          ? 'bg-cyan-600 text-white shadow'
+                          : 'text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      HTML5 Player
+                    </button>
+                    {(selectedVideo.previewUrl || selectedVideo.id) && (
+                      <button
+                        type="button"
+                        onClick={() => setPlayerIframeMode(true)}
+                        className={`px-2 py-0.5 rounded text-[11px] font-semibold transition-all ${
+                          playerIframeMode
+                            ? 'bg-cyan-600 text-white shadow'
+                            : 'text-slate-400 hover:text-slate-200'
+                        }`}
+                      >
+                        Drive Embed Player
+                      </button>
+                    )}
+                  </div>
+                </div>
+
                 <div className="aspect-video bg-black rounded-xl overflow-hidden border border-slate-800 relative shadow-inner">
-                  <video
-                    key={selectedVideo.filename}
-                    controls
-                    autoPlay
-                    preload="metadata"
-                    className="w-full h-full object-contain"
-                  >
-                    <source src={selectedVideo.liveUrl} type={selectedVideo.mimetype} />
-                    Your browser does not support HTML5 video player.
-                  </video>
+                  {playerIframeMode && (selectedVideo.previewUrl || selectedVideo.id) ? (
+                    <iframe
+                      src={selectedVideo.previewUrl || `https://drive.google.com/file/d/${selectedVideo.id}/preview`}
+                      className="w-full h-full border-0"
+                      allow="autoplay; encrypted-media"
+                      allowFullScreen
+                      title={selectedVideo.filename}
+                    />
+                  ) : (
+                    <video
+                      key={selectedVideo.filename + selectedVideo.liveUrl}
+                      controls
+                      autoPlay
+                      preload="metadata"
+                      className="w-full h-full object-contain"
+                    >
+                      <source src={selectedVideo.liveUrl} type={selectedVideo.mimetype} />
+                      Your browser does not support HTML5 video player.
+                    </video>
+                  )}
                 </div>
                 <div>
                   <h4 className="font-semibold text-slate-100 text-sm truncate">{selectedVideo.filename}</h4>
